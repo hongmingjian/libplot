@@ -1,0 +1,57 @@
+#ifndef LIBPLOT_H
+#define LIBPLOT_H
+
+#ifdef __cplusplus
+#define EXTERN_C extern "C"
+#else
+#define EXTERN_C
+#endif
+#ifdef _MSC_VER
+#define EXPORT_C EXTERN_C __declspec( dllexport )
+#else
+#define EXPORT_C EXTERN_C __attribute__((visibility("default")))
+#endif
+
+enum {
+    OP_NONE = 0,
+
+    OP_SET_TEXT_COLOR,
+    OP_SET_TEXT_FONT,
+    OP_DRAW_TEXT,
+    OP_SET_LINE_COLOR,
+    OP_SET_LINE_WIDTH,
+    OP_SET_LINE_STYLE,
+    OP_MOVETO,
+    OP_LINETO,
+    OP_DRAW_CIRCLE,
+    OP_SET_FILL_COLOR,
+    OP_SET_FILL_PATTERN,
+
+	OP_COUNT
+};
+
+enum AxisType {
+	AXIS_LEFT = 0,
+	AXIS_RIGHT = 1
+};
+
+struct draw_command {
+    int op;
+    float x;
+    float y;
+	float argf1;
+    char argc1[64];
+    int zIndex;
+};
+
+
+EXPORT_C void *create_figure(void);
+EXPORT_C void destroy_figure(void *fig);
+EXPORT_C int set_option(void *fig, const char *option, const char *value);
+EXPORT_C void zoom(void *fig, int cx, int cy, float factor);
+EXPORT_C void pan(void *fig, int dx, int dy);
+EXPORT_C void pixel2logical(void *fig, int px, int py, float *lx, float *ly, float *ly2);
+EXPORT_C int plot(void *fig, const float *x_array, const float *y_array, int count, struct draw_command *out, int nout);
+
+
+#endif // LIBPLOT_H
