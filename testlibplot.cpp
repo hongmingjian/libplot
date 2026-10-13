@@ -11,22 +11,24 @@
 
 #include "libplot.h"
 
-typedef void* (*FuncCreateFigure)();
+typedef void* (*FuncCreateFigure)(int);
 typedef void  (*FuncDestroyFigure)(void*);
-typedef int   (*FuncPlot)(void*, const float*, const float*, int, struct draw_command*, int);
+//typedef int   (*FuncAddCurve)(void*, const float*, const float*, int);
 typedef int   (*FuncSetOption)(void*, const char*, const char*);
 typedef void  (*FuncPan)(void*, int, int);
 typedef void  (*FuncZoom)(void*, int, int, float);
 typedef void  (*FuncPixel2Logical)(void *, int, int, float*, float*, float*);
+typedef int   (*FuncShow)(void*, struct draw_command *, int);
 
 HMODULE            hPlotDll         = nullptr;
 FuncCreateFigure   pfnCreateFigure  = nullptr;
 FuncDestroyFigure  pfnDestroyFigure = nullptr;
-FuncPlot           pfnPlot          = nullptr;
+//FuncPlot           pfnPlot          = nullptr;
 FuncSetOption      pfnSetOption     = nullptr;
 FuncPan            pfnPan           = nullptr;
 FuncZoom           pfnZoom          = nullptr;
 FuncPixel2Logical  pfnPixel2Logical = nullptr;
+FuncShow           pfnShow          = nullptr;
 
 int g_canvasWidth  = 550;
 int g_canvasHeight = 450;
@@ -69,7 +71,8 @@ int convertLineStyle(const char* styleStr) {
 }
 
 HPEN CreateGDIRenderPen(int style, int width, COLORREF color) {
-    if (style == PS_SOLID) return CreatePen(PS_SOLID, width, color);
+    if (style == PS_SOLID)
+		return CreatePen(PS_SOLID, width, color);
     LOGBRUSH lb = { BS_SOLID, color, 0 };
     return ExtCreatePen(PS_GEOMETRIC | style, width, &lb, 0, NULL);
 }
@@ -92,9 +95,12 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct draw_command>& cmds) {
     for (const auto& cmd : cmds) {
         switch (cmd.op) {
         case OP_SET_TEXT_COLOR:
+            SetTextColor(hdc, convertColor(cmd.argc1));
+            break;
+        case OP_SET_LINE_COLOR:
             curColor = convertColor(cmd.argc1);
-            SetTextColor(hdc, curColor);
-            SelectObject(hdc, hOldPen); DeleteObject(hCurPen);
+            SelectObject(hdc, hOldPen);
+			DeleteObject(hCurPen);
             hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
             hOldPen = (HPEN)SelectObject(hdc, hCurPen);
             break;
@@ -102,18 +108,23 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct draw_command>& cmds) {
             curLineWidth = (int)cmd.argf1;
 			if (curLineWidth < 1)
 				curLineWidth = 1;
-            SelectObject(hdc, hOldPen); DeleteObject(hCurPen);
+            SelectObject(hdc, hOldPen);
+			DeleteObject(hCurPen);
             hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
             hOldPen = (HPEN)SelectObject(hdc, hCurPen);
             break;
         case OP_SET_LINE_STYLE:
             curLineStyle = convertLineStyle(cmd.argc1);
-            SelectObject(hdc, hOldPen); DeleteObject(hCurPen);
+            SelectObject(hdc, hOldPen);
+			DeleteObject(hCurPen);
             hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
             hOldPen = (HPEN)SelectObject(hdc, hCurPen);
             break;
         case OP_SET_TEXT_FONT:
-            if (hCurFont) { SelectObject(hdc, hOldFont); DeleteObject(hCurFont); }
+            if (hCurFont) {
+				SelectObject(hdc, hOldFont);
+				DeleteObject(hCurFont);
+			}
 #ifdef UNICODE
             wchar_t wFontName[64]; MultiByteToWideChar(CP_ACP, 0, cmd.argc1, -1, wFontName, 64);
             hCurFont = CreateFontW(-(int)cmd.argf1, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, wFontName);
@@ -142,7 +153,8 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct draw_command>& cmds) {
 	DeleteObject(hCurPen);
 	SelectObject(hdc, hOldBrush);
     if (hCurFont) {
-		SelectObject(hdc, hOldFont); DeleteObject(hCurFont);
+		SelectObject(hdc, hOldFont);
+		DeleteObject(hCurFont);
 	}
 }
 
@@ -150,7 +162,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     switch (message) {
     case WM_CREATE:
         if (pfnCreateFigure)
-			g_fig = pfnCreateFigure();
+			g_fig = pfnCreateFigure(COORD_CARTESIAN);
 
 		break;
 
@@ -238,6 +250,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
 
             if (factor != 1.0f) {
+//				printf("factor=%f\n", factor);
+				fflush(stdout);
                 pfnZoom(g_fig, ptMouse.x, ptMouse.y, factor);
                 InvalidateRect(hWnd, NULL, FALSE);
             }
@@ -275,25 +289,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         FillRect(hdcMem, &rect, hBgBrush);
         DeleteObject(hBgBrush);
 
-        if (g_fig && pfnPlot) {
-			// C. 模拟一波动态正弦数据（根据当前最新的画布高度居中自适应）
-			std::vector<float> x_data;
-			std::vector<float> y_data;
-			float centerY = (float)g_canvasHeight / 2.0f;
-			for (int i = 0; i < 60; ++i) {
-				x_data.push_back(50.0f + i * ((float)(g_canvasWidth - 100) / 60.0f));
-				y_data.push_back(centerY + (float)std::sin(i * 0.3f) * (centerY * 0.6f));
-			}
-
+        if (g_fig && pfnShow) {
 			const int MAX_OUT_COMMANDS = 1024;
 			std::vector<struct draw_command> out_cmds(MAX_OUT_COMMANDS);
 
-			int actual_count = pfnPlot(g_fig, x_data.data(), y_data.data(), (int)x_data.size(), out_cmds.data(), MAX_OUT_COMMANDS);
+			int actual_count = pfnShow(g_fig, out_cmds.data(), MAX_OUT_COMMANDS);
 
 			if (actual_count > 0) {
-				if (actual_count > MAX_OUT_COMMANDS) actual_count = MAX_OUT_COMMANDS;
-				out_cmds.resize(actual_count);
-
 				ExecuteDrawCommands(hdcMem, out_cmds);
 			}
         } else {
@@ -321,15 +323,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+#ifdef _DEBUG
+    AllocConsole();
+    freopen("CONOUT$", "w", stdout);
+    freopen("CONOUT$", "w", stderr);
+#endif
+
     hPlotDll = LoadLibrary(L"debug\\libplot.dll");
     if (hPlotDll) {
         pfnCreateFigure  = (FuncCreateFigure)GetProcAddress(hPlotDll, "create_figure");
         pfnDestroyFigure = (FuncDestroyFigure)GetProcAddress(hPlotDll, "destroy_figure");
-        pfnPlot          = (FuncPlot)GetProcAddress(hPlotDll, "plot");
+//        pfnPlot          = (FuncPlot)GetProcAddress(hPlotDll, "plot");
         pfnSetOption     = (FuncSetOption)GetProcAddress(hPlotDll, "set_option");
 		pfnPan           = (FuncPan)GetProcAddress(hPlotDll, "pan");
 		pfnZoom          = (FuncZoom)GetProcAddress(hPlotDll, "zoom");
-		pfnPixel2Logical  = (FuncPixel2Logical)GetProcAddress(hPlotDll, "pixel2logical");
+		pfnPixel2Logical = (FuncPixel2Logical)GetProcAddress(hPlotDll, "pixel2logical");
+		pfnShow          = (FuncShow)GetProcAddress(hPlotDll, "show");
     }
 
     const wchar_t szClassName[] = L"TestLibPlotClass";

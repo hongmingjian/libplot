@@ -12,6 +12,14 @@
 #define EXPORT_C EXTERN_C __attribute__((visibility("default")))
 #endif
 
+struct draw_command {
+    int op;
+    float x;
+    float y;
+	float argf1;
+    char argc1[64];
+    int zIndex;
+};
 enum {
     OP_NONE = 0,
 
@@ -30,28 +38,29 @@ enum {
 	OP_COUNT
 };
 
-enum AxisType {
-	AXIS_LEFT = 0,
-	AXIS_RIGHT = 1
+enum {
+	COORD_CARTESIAN = 0,
+	COORD_POLAR = 1
 };
 
-struct draw_command {
-    int op;
-    float x;
-    float y;
-	float argf1;
-    char argc1[64];
-    int zIndex;
+enum {
+	AXIS_PRIMARY = 0,
+	AXIS_SECONDARY = 1
 };
 
-
-EXPORT_C void *create_figure(void);
+EXPORT_C void *create_figure(int coord);
 EXPORT_C void destroy_figure(void *fig);
-EXPORT_C int set_option(void *fig, const char *option, const char *value);
-EXPORT_C void zoom(void *fig, int cx, int cy, float factor);
-EXPORT_C void pan(void *fig, int dx, int dy);
-EXPORT_C void pixel2logical(void *fig, int px, int py, float *lx, float *ly, float *ly2);
-EXPORT_C int plot(void *fig, const float *x_array, const float *y_array, int count, struct draw_command *out, int nout);
 
+EXPORT_C int set_option(void *obj, const char *option, const char *value);
+
+EXPORT_C void pan(void *fig, int dx, int dy);
+EXPORT_C void zoom(void *fig, int cx, int cy, float factor);
+EXPORT_C void pixel2logical(void *fig, int px, int py, float *lx, float *ly, float *ly2);
+
+EXPORT_C void *plot_curve(void *obj, const float *x, const float *y, int count);
+EXPORT_C void append_points(void *line, const float *x, const float *y, int count);
+EXPORT_C int remove_curve(void *fig, void *line);
+
+EXPORT_C int show(void *fig, struct draw_command *out, int nout);
 
 #endif // LIBPLOT_H
