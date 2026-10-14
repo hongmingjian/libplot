@@ -7,7 +7,6 @@
 #include <map>
 #include <algorithm>
 #include <cmath>
-#include <variant>
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -20,14 +19,15 @@ typedef struct draw_command draw_command;
 class Figure;
 
 enum AxisScale { SCALE_LINEAR = 0, SCALE_LOG = 1 };
+
 enum MarkerType {
-    MARKER_NONE = 0, // 默认不画标记
+    MARKER_NONE = 0,
     MARKER_X,        // 'x'
     MARKER_PLUS,     // '+'
-    MARKER_CIRCLE,   // 圆圈 'o'
-    MARKER_SQUARE,   // 方块 's'
-    MARKER_TRIANGLE, // 三角 '^'
-    MARKER_DIAMOND   // 菱形 'd'
+    MARKER_CIRCLE,   // 'o'
+    MARKER_SQUARE,   // 's'
+    MARKER_TRIANGLE, // '^'
+    MARKER_DIAMOND   // 'd'
 };
 
 struct TickConfig {
@@ -66,23 +66,33 @@ struct Axis {
 
 	void applyMargin()
 	{
-        if (scale == SCALE_LOG)
-			return;
         if (ratioMargin <= 0.0f)
 			return;
-        float d = (max - min) * ratioMargin;
-        min -= d;
-        max += d;
+
+		double d;
+        if (scale == SCALE_LOG) {
+            double logMin = std::log10(min);
+            double logMax = std::log10(max);
+			d = (logMax - logMin) * ratioMargin;
+            min = std::pow(10.0, logMin + d);
+            max = std::pow(10.0, logMax + d);
+		} else {
+			d = (max - min) * ratioMargin;
+			min -= d;
+			max += d;
+		}
     }
 
     void pan(float d)
 	{
         if (!panEnabled)
 			return;
+		if (!std::isnormal(d))
+			return;
 
         if (scale == SCALE_LOG) {
-            min = (float)std::pow(10.0, std::log10(min) + d);
-            max = (float)std::pow(10.0, std::log10(max) + d);
+            min = std::pow(10.0, std::log10(min) + d);
+            max = std::pow(10.0, std::log10(max) + d);
         } else {
             min += d;
             max += d;
@@ -93,26 +103,33 @@ struct Axis {
 	{
 		if (!zoomEnabled)
 			return;
-		if (factor <= 0.0f)
+		if (factor <= 0)
+			return;
+		if (!std::isnormal(max - min))
 			return;
 
+		double newMin = min;
+		double newMax = max;
+
 		if (scale == SCALE_LOG) {
-			double logCenter = std::log10(center <= 0.0f ? 1e-5 : center);
-			double logMin    = std::log10(min);
-			double logMax    = std::log10(max);
-
-			double newLogRange = (logMax - logMin) * factor;
-			double ratio       = (logCenter - logMin) / (logMax - logMin);
-
-			min = (float)std::pow(10.0, logCenter - newLogRange * ratio);
-			max = (float)std::pow(10.0, logCenter + newLogRange * (1.0 - ratio));
-		} else {
-			float newRange = (max - min) * factor;
-			float ratio    = (center - min) / (max - min);
-
-			min = center - newRange * ratio;
-			max = center + newRange * (1.0f - ratio);
+			newMin = std::log10(newMin);
+			newMax = std::log10(newMax);
+			center = std::log10(center);
 		}
+
+		newMin = center * (1 - factor) + newMin * factor;
+		newMax = center * (1 - factor) + newMax * factor;
+
+		if (scale == SCALE_LOG) {
+			newMin = std::pow(10.0, newMin);
+			newMax = std::pow(10.0, newMax);
+		}
+
+		if (newMax <= newMin || !std::isnormal(newMax - newMin))
+			return;
+
+		min = newMin;
+		max = newMax;
 	}
 
 	float NiceNumber(float x, bool round) const
@@ -164,28 +181,23 @@ struct Axis {
 			float leftMax = figure->axisY.max;
 			float leftRange = leftMax - leftMin;
 
-			if (leftRange > 0.0f) {
-				for (float leftVal : leftTicks) {
-					if (scale == SCALE_LOG) {
-						double logMin2 = std::log10(min <= 0 ? 1e-5 : min);
-						double logMax2 = std::log10(max <= 0 ? 1.0 : max);
-						float rightVal = (float)std::pow(10.0, logMin2 + (logMax2 - logMin2) * (leftVal - leftMin) / leftRange);
-						ticks.push_back(rightVal);
-					} else {
-						float rightVal = (float)(min + (max - min) * (leftVal - leftMin) / leftRange);
-						ticks.push_back(rightVal);
-					}
+			if (std::isnormal(leftRange)) {
+				if (scale == SCALE_LOG) {
+					double logMin2 = std::log10(min);
+					double logMax2 = std::log10(max);
+					for (float leftVal : leftTicks)
+						ticks.push_back(std::pow(10.0, logMin2 + (logMax2 - logMin2) * (leftVal - leftMin) / leftRange));
+				} else {
+					for (float leftVal : leftTicks)
+						ticks.push_back(min + (max - min) * (leftVal - leftMin) / leftRange);
 				}
 			}
 			return ticks;
 		}
 
 		if (scale == SCALE_LOG) {
-			double safeMin = min <= 0.0f ? 1e-5 : min;
-			double safeMax = max <= 0.0f ? 1 : max;
-
-			double logMin = std::log10(safeMin);
-			double logMax = std::log10(safeMax);
+			double logMin = std::log10(min);
+			double logMax = std::log10(max);
 			double decadeRange = logMax - logMin;
 
 			if (decadeRange >= 1.0) {
@@ -204,16 +216,16 @@ struct Axis {
 				for (int expv = startExponent; expv <= endExponent; expv += exponentStep) {
 					double val = std::pow(10.0, expv);
 					if (val >= displayMin - 1e-6 && val <= displayMax + 1e-6) {
-						ticks.push_back((float)val);
+						if (val >= min && val <= max)
+							ticks.push_back((float)val);
 					}
 				}
-			}
-			else {
-				double baseRange = NiceNumber(safeMax - safeMin, false);
+			} else {
+				double baseRange = NiceNumber(max - min, false);
 				double niceStep  = NiceNumber(baseRange / (count - 1), true);
 
-				double displayMin = std::floor(safeMin / niceStep) * niceStep;
-				double displayMax = std::ceil(safeMax / niceStep) * niceStep;
+				double displayMin = std::floor(min / niceStep) * niceStep;
+				double displayMax = std::ceil(max / niceStep) * niceStep;
 
 				double start = displayMin;
 				double end   = displayMax;
@@ -281,8 +293,6 @@ public:
 	Axis axisY;   // primary (left) Y, as r in Polar
 	Axis axisY2;  // secondary (right) Y
 
-	std::pair<float, float> centerPixelPolar{0, 0};
-
 	std::vector<Curve *> curves;
 
     void applyMargin() {
@@ -314,6 +324,10 @@ public:
         axisY2.figure = this;
 		axisY2.visible = false;
 
+		axisY.min = 1;//std::numeric_limits<float>::min();
+		axisY.max = 1e2;
+		//axisY.scale = SCALE_LOG;
+
 		if (coord == COORD_POLAR) {
 			axisX.min = 0.0f;
 			axisX.max = 2 * M_PI;
@@ -334,10 +348,14 @@ public:
     float GetPlotHeight() const { return height - paddings.at("T") - paddings.at("B"); }
 
     float ToPixelX(float mathX) const {
+		if (!std::isnormal(axisX.max - axisX.min))
+			return std::numeric_limits<float>::quiet_NaN();
+
         if (axisX.scale == SCALE_LOG) {
-            double logX = std::log10(mathX <= 0 ? 1e-5 : mathX);
-            double logMin = std::log10(axisX.min <= 0 ? 1e-5 : axisX.min);
-            double logMax = std::log10(axisX.max <= 0 ? 1.0 : axisX.max);
+            double logX = std::log10(mathX);
+            double logMin = std::log10(axisX.min);
+            double logMax = std::log10(axisX.max);
+
             return paddings.at("L") + GetPlotWidth() * (logX - logMin) / (logMax - logMin);
         }
         return paddings.at("L") + GetPlotWidth() * (mathX - axisX.min) / (axisX.max - axisX.min);
@@ -345,10 +363,14 @@ public:
 
     float ToPixelY(float mathY, int which = AXIS_PRIMARY) const {
 		const Axis& axis = (which == AXIS_SECONDARY) ? axisY2 : axisY;
+
+		if (!std::isnormal(axis.max - axis.min))
+			return std::numeric_limits<float>::quiet_NaN();
+
         if (axis.scale == SCALE_LOG) {
-            double logY = std::log10(mathY <= 0 ? 1e-5 : mathY);
-            double logMin = std::log10(axis.min <= 0 ? 1e-5 : axis.min);
-            double logMax = std::log10(axis.max <= 0 ? 1.0 : axis.max);
+            double logY = std::log10(mathY);
+            double logMin = std::log10(axis.min);
+            double logMax = std::log10(axis.max);
             return (height - paddings.at("B")) - GetPlotHeight() * (logY - logMin) / (logMax - logMin);
         }
         return (height - paddings.at("B")) - GetPlotHeight() * (mathY - axis.min) / (axis.max - axis.min);
@@ -356,8 +378,8 @@ public:
 
     float ToMathX(float pixelX) const {
         if (axisX.scale == SCALE_LOG) {
-            double logMin = std::log10(axisX.min <= 0 ? 1e-5 : axisX.min);
-            double logMax = std::log10(axisX.max <= 0 ? 1.0 : axisX.max);
+            double logMin = std::log10(axisX.min);
+            double logMax = std::log10(axisX.max);
             return std::pow(10.0, logMin + (logMax - logMin) * (pixelX - paddings.at("L")) / GetPlotWidth());
         }
         return axisX.min + (axisX.max - axisX.min) * (pixelX - paddings.at("L")) / GetPlotWidth();
@@ -366,35 +388,42 @@ public:
     float ToMathY(float pixelY, int which = AXIS_PRIMARY) const {
 		const Axis& axis = (which == AXIS_SECONDARY) ? axisY2 : axisY;
         if (axis.scale == SCALE_LOG) {
-            double logMin = std::log10(axis.min <= 0 ? 1e-5 : axis.min);
-            double logMax = std::log10(axis.max <= 0 ? 1.0 : axis.max);
+            double logMin = std::log10(axis.min);
+            double logMax = std::log10(axis.max);
             return std::pow(10.0, logMin + (logMax - logMin) * (height - paddings.at("B") - pixelY) / GetPlotHeight());
         }
         return axis.min + (axis.max - axis.min) * (height - paddings.at("B") - pixelY) / GetPlotHeight();
     }
 
     std::pair<float, float> ToPolarPixel(float theta, float r) const {
-        double cx = paddings.at("L") + GetPlotWidth() / 2.0f + centerPixelPolar.first;
-        double cy = paddings.at("T") + GetPlotHeight() / 2.0f + centerPixelPolar.second;
-        double maxPixelR = std::min(GetPlotWidth(), GetPlotHeight()) / 2.0f;
-		double min, max;
+        double cx = paddings.at("L") + GetPlotWidth() / 2.0f;
+        double cy = paddings.at("T") + GetPlotHeight() / 2.0f;
 
+		if (r == 0.0f)
+			return {cx, cy};
+
+		if (!std::isnormal(axisY.max - axisY.min))
+			return {std::numeric_limits<float>::quiet_NaN(),
+				    std::numeric_limits<float>::quiet_NaN()};
+
+		double rmin, rmax;
         if (axisY.scale == SCALE_LOG) {
-            r = std::log10(r <= 0.0f ? 1e-5f : r);
-            min = std::log10(axisY.min <= 0 ? 1e-5f : axisY.min);
-            max = std::log10(axisY.max <= 0 ? 1.0 : axisY.max);
+            r = std::log10(r);
+            rmin = std::log10(axisY.min);
+            rmax = std::log10(axisY.max);
         } else {
-			min = axisY.min;
-			max = axisY.max;
+			rmin = axisY.min;
+			rmax = axisY.max;
         }
 
-        return {cx + maxPixelR * (r - min) / (max - min) * std::cos(theta),
-                cy - maxPixelR * (r - min) / (max - min) * std::sin(theta)};
+        double maxPixelR = std::min(GetPlotWidth(), GetPlotHeight()) / 2.0f;
+        return {cx + maxPixelR * (r - rmin) / (rmax - rmin) * std::cos(theta),
+                cy - maxPixelR * (r - rmin) / (rmax - rmin) * std::sin(theta)};
     }
 
     std::pair<float, float> ToPolarMath(float pixelX, float pixelY) const {
-        double cx = paddings.at("L") + GetPlotWidth() / 2.0f + centerPixelPolar.first;
-        double cy = paddings.at("T") + GetPlotHeight() / 2.0f + centerPixelPolar.second;
+        double cx = paddings.at("L") + GetPlotWidth() / 2.0f;
+        double cy = paddings.at("T") + GetPlotHeight() / 2.0f;
         double maxPixelR = std::min(GetPlotWidth(), GetPlotHeight()) / 2.0f;
 
         double dx = pixelX - cx;
@@ -405,8 +434,8 @@ public:
         float r;
 
         if (axisY.scale == SCALE_LOG) {
-            double logMin = std::log10(axisY.min <= 0 ? 1e-5f : axisY.min);
-            double logMax = std::log10(axisY.max <= 0 ? 1.0 : axisY.max);
+            double logMin = std::log10(axisY.min);
+            double logMax = std::log10(axisY.max);
 
             r = std::pow(10.0, logMin + (logMax - logMin) * std::sqrt(dx * dx + dy * dy) / maxPixelR);
         } else {
@@ -429,30 +458,56 @@ public:
 		}
 	}
 
-    void pan(int pixelXDelta, int pixelYDelta) {
-        if (coord == COORD_POLAR) {
-			centerPixelPolar.first += pixelXDelta;
-			centerPixelPolar.second += pixelYDelta;
-            return;
+    void pan(int pixelXDelta, int pixelYDelta)
+	{
+        if (pixelXDelta == 0 && pixelYDelta == 0)
+			return;
+
+        double plotWidth  = GetPlotWidth();
+        double plotHeight = GetPlotHeight();
+
+        if (pixelXDelta != 0) {
+            if (axisX.scale == SCALE_LOG) {
+                axisX.pan(-(std::log10(axisX.max) - std::log10(axisX.min)) * pixelXDelta / plotWidth);
+            } else {
+                axisX.pan(-(ToMathX(pixelXDelta) - ToMathX(0.0f)));
+            }
         }
 
-		axisX.pan(-(ToMathX(pixelXDelta) - ToMathX(0.0f)));
-		axisY.pan(-(ToMathY(pixelYDelta) - ToMathY(0.0f)));
-		if (axisY2.visible)
-			axisY2.pan(-(ToMathY(pixelYDelta, AXIS_SECONDARY) - ToMathY(0.0f, AXIS_SECONDARY)));
+        if (pixelYDelta != 0) {
+            if (axisY.scale == SCALE_LOG) {
+                if (coord == COORD_POLAR) {
+					axisY.pan(std::log10(ToPolarMath(pixelXDelta, pixelYDelta).second) - std::log10(ToPolarMath(0.0f, 0.0f).second));
+                } else {
+					axisY.pan((std::log10(axisY.max) - std::log10(axisY.min)) * pixelYDelta / plotHeight);
+                }
+            } else {
+                if (coord == COORD_POLAR) {
+                    axisY.pan(ToPolarMath(pixelXDelta, pixelYDelta).second - ToPolarMath(0.0f, 0.0f).second);
+                } else {
+                    axisY.pan(-(ToMathY(pixelYDelta) - ToMathY(0.0f)));
+                }
+            }
+
+			if (axisY2.visible) {
+				if (axisY2.scale == SCALE_LOG) {
+					axisY2.pan((std::log10(axisY2.max) - std::log10(axisY2.min)) * pixelYDelta / plotHeight);
+				} else {
+					axisY2.pan(-(ToMathY(pixelYDelta, AXIS_SECONDARY) - ToMathY(0.0f, AXIS_SECONDARY)));
+				}
+			}
+        }
     }
 
-    void zoom(int pixelX, int pixelY, float factor) {
-        if (coord == COORD_POLAR) {
-            auto mathXY = ToPolarMath(pixelX, pixelY);
-			//axisX.zoom(mathXY.first, factor); // should be disabled already
-			axisY.zoom(axisY.min/*mathXY.second*/, factor);
-        } else {
-            axisX.zoom(ToMathX(pixelX), factor);
-            axisY.zoom(ToMathY(pixelY), factor);
-            if (axisY2.visible)
-                axisY2.zoom(ToMathY(pixelY, AXIS_SECONDARY), factor);
-        }
+    void zoom(int pixelX, int pixelY, float factor)
+	{
+		axisX.zoom(ToMathX(pixelX), factor);
+		if (coord == COORD_POLAR)
+			axisY.zoom(axisY.min, factor); // only zoom in and out around the center
+		else
+			axisY.zoom(ToMathY(pixelY), factor);
+		if (axisY2.visible)
+			axisY2.zoom(ToMathY(pixelY, AXIS_SECONDARY), factor);
     }
 
 	char *safe_strncpy(char *buf, const char *src, size_t bufsize)
@@ -498,7 +553,7 @@ public:
 			}
 
 			auto xTickValues = axisX.calculateTicks(xTicksCount);
-			for (double theta : xTickValues) {
+			for (float theta : xTickValues) {
 				if (theta <= axisX.min)
 					continue;
 				std::pair<float, float> outer_edge = ToPolarPixel(theta, axisY.max);
@@ -549,7 +604,6 @@ public:
 			float pyMin = ToPixelY(axisY.min);
 			float pyMax = ToPixelY(axisY.max);
 
-			double xTilt = 0;//GetOpt("xLabelAngle", 0.0);
 			auto xTickValues = axisX.calculateTicks(xTicksCount);
 			for (float x : xTickValues) {
 				float px = ToPixelX(x);

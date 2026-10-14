@@ -1,5 +1,5 @@
 //
-// cl.exe /EHsc /utf-8 /Zi /I. /DUNICODE /D_UNICODE testlibplot.cpp /link /DEBUG /SUBSYSTEM:WINDOWS user32.lib gdi32.lib
+// cl.exe /EHsc /MDd /utf-8 /Zi /I. /D_DEBUG /DUNICODE /D_UNICODE testlibplot.cpp /link /DEBUG /SUBSYSTEM:WINDOWS user32.lib gdi32.lib
 //
 #include <windows.h>
 #include <vector>
