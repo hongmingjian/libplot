@@ -7,18 +7,10 @@
 #include <map>
 #include <algorithm>
 #include <cmath>
-#include <iostream>
-#include <sstream>
-#include <iomanip>
-
 
 #include "libplot.h"
 
-typedef struct draw_command draw_command;
-
 class Figure;
-
-enum AxisScale { SCALE_LINEAR = 0, SCALE_LOG = 1 };
 
 enum MarkerType {
     MARKER_NONE = 0,
@@ -48,7 +40,7 @@ struct Axis {
 	//std::string name = "";
     std::string label = "";
 
-    AxisScale scale = SCALE_LINEAR;
+    int scale = SCALE_LINEAR;
     float min = 0.0f;
     float max = 100.0f;
 	float ratioMargin = 0.08f;
@@ -282,18 +274,10 @@ struct Curve {
 };
 
 class Figure {
-public:
-	int coord = COORD_CARTESIAN;
+private:
 	float width = 500.0f; //in pixels
 	float height = 400.0f; //in pixels
-	//std::string bgColor = "#FFFFFF";
 	std::map<std::string, float> paddings = { {"L", 60}, {"T", 40}, {"R", 60}, {"B", 40}};
-
-	Axis axisX;   // as theta in Polar
-	Axis axisY;   // primary (left) Y, as r in Polar
-	Axis axisY2;  // secondary (right) Y
-
-	std::vector<Curve *> curves;
 
     void applyMargin() {
         if (coord == COORD_POLAR)
@@ -304,17 +288,18 @@ public:
             axisY2.applyMargin();
     }
 
-    int set_option(const std::string& option, const std::string& value) {
-		if (option == "figure.size") {
-			int w, h;
-			if (sscanf(value.c_str(), "%dx%d", &w, &h) == 2) {
-				width = w;
-				height = h;
-				return 0;
-			}
-		}
-		return -1;
-	}
+    float GetPlotWidth() const { return width - paddings.at("L") - paddings.at("R"); }
+    float GetPlotHeight() const { return height - paddings.at("T") - paddings.at("B"); }
+
+public:
+	int coord = COORD_CARTESIAN;
+	//std::string bgColor = "#FFFFFF";
+
+	Axis axisX;   // as theta in Polar
+	Axis axisY;   // primary (left) Y, as r in Polar
+	Axis axisY2;  // secondary (right) Y
+
+	std::vector<Curve *> curves;
 
     Figure(int coord_ = COORD_CARTESIAN) {
 		coord = coord_;
@@ -344,8 +329,19 @@ public:
         curves.clear();
     }
 
-    float GetPlotWidth() const { return width - paddings.at("L") - paddings.at("R"); }
-    float GetPlotHeight() const { return height - paddings.at("T") - paddings.at("B"); }
+	int show(struct draw_command *out, size_t nout) const;
+
+    int set_option(const std::string& option, const std::string& value) {
+		if (option == "figure.size") {
+			int w, h;
+			if (sscanf(value.c_str(), "%dx%d", &w, &h) == 2) {
+				width = w;
+				height = h;
+				return 0;
+			}
+		}
+		return -1;
+	}
 
     float ToPixelX(float mathX) const {
 		if (!std::isnormal(axisX.max - axisX.min))
@@ -509,157 +505,6 @@ public:
 		if (axisY2.visible)
 			axisY2.zoom(ToMathY(pixelY, AXIS_SECONDARY), factor);
     }
-
-	char *safe_strncpy(char *buf, const char *src, size_t bufsize)
-	{
-		std::strncpy(buf, src, bufsize - 1);
-		buf[bufsize - 1] = '\0';
-		return buf;
-	}
-
-    std::string FormatNumber(double val, AxisScale scale)
-	{
-        std::ostringstream oss;
-        if (scale == SCALE_LOG && (val >= 1000.0 || val <= 0.001)) {
-            oss << std::scientific << std::setprecision(0) << val;
-            return oss.str();
-        }
-        oss << std::setprecision(4) << val;
-        return oss.str();
-    }
-
-	int show(struct draw_command *out, size_t nout)
-	{
-		std::vector<struct draw_command> cmds;
-        int xTicksCount = 10;//static_cast<int>(GetOpt("xTargetTicks", 6.0));
-        int yTicksCount = 5;//static_cast<int>(GetOpt("leftYTargetTicks", 5.0));
-
-		if (coord == COORD_POLAR) {
-			auto [cx, cy] = ToPolarPixel(0.0, 0.0);
-
-			auto yTickValues = axisY.calculateTicks(yTicksCount);
-			for (float r : yTickValues) {
-				if (r <= axisY.min)
-					continue;
-				std::pair<float, float> edge = ToPolarPixel(0.0, r);
-				float pixelR = std::abs(edge.first - cx);
-				if (pixelR > 0) {
-					cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, ":", 10});
-					cmds.push_back(draw_command{OP_DRAW_CIRCLE, cx, cy, pixelR, "", 10});
-					cmds.push_back(draw_command{OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, "#C0C0C0", 10});
-					cmds.push_back(draw_command{OP_DRAW_TEXT, edge.first, edge.second-2.0f, 0.0f, "", 10});
-					safe_strncpy(cmds.back().argc1, FormatNumber(r, SCALE_LINEAR).c_str(), sizeof(draw_command::argc1));
-				}
-			}
-
-			auto xTickValues = axisX.calculateTicks(xTicksCount);
-			for (float theta : xTickValues) {
-				if (theta <= axisX.min)
-					continue;
-				std::pair<float, float> outer_edge = ToPolarPixel(theta, axisY.max);
-
-				cmds.push_back(draw_command{OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, "#C0C0C0", 10});
-				cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, ":", 10});
-				cmds.push_back(draw_command{OP_MOVETO, cx, cy, 0.0f, "", 10});
-				cmds.push_back(draw_command{OP_LINETO, outer_edge.first, outer_edge.second, 0.0f, "", 10});
-
-				float text_px = outer_edge.first + 15.0f * static_cast<float>(std::cos(theta));
-				float text_py = outer_edge.second - 15.0f * static_cast<float>(std::sin(theta));
-				cmds.push_back(draw_command{OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, "#000000", 10});
-				cmds.push_back(draw_command{OP_DRAW_TEXT, text_px, text_py, 0.0f, "", 10});
-				safe_strncpy(cmds.back().argc1, FormatNumber(180 * theta / M_PI, SCALE_LINEAR).c_str(), sizeof(draw_command::argc1));
-			}
-
-			std::pair<float, float> max_edge = ToPolarPixel(0.0, axisY.max);
-			float max_pixel_r = std::abs(max_edge.first - cx);
-			if (max_pixel_r > 0) {
-				cmds.push_back(draw_command{OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, "#000000", 50});
-				cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, "-", 50});
-				cmds.push_back(draw_command{OP_SET_LINE_WIDTH, 0.0f, 0.0f, 1.5f, "", 50});
-				cmds.push_back(draw_command{OP_DRAW_CIRCLE, cx, cy, max_pixel_r, "", 50});
-
-				std::pair<float, float> xx;
-
-				xx = ToPolarPixel(0, axisY.max);
-				cmds.push_back(draw_command{OP_MOVETO, cx, cy, 0.0f, "", 50});
-				cmds.push_back(draw_command{OP_LINETO, xx.first, xx.second, 0.0f, "", 50});
-
-				xx = ToPolarPixel(M_PI / 2, axisY.max);
-				cmds.push_back(draw_command{OP_MOVETO, cx, cy, 0.0f, "", 50});
-				cmds.push_back(draw_command{OP_LINETO, xx.first, xx.second, 0.0f, "", 50});
-
-				xx = ToPolarPixel(M_PI, axisY.max);
-				cmds.push_back(draw_command{OP_MOVETO, cx, cy, 0.0f, "", 50});
-				cmds.push_back(draw_command{OP_LINETO, xx.first, xx.second, 0.0f, "", 50});
-
-				xx = ToPolarPixel(3 * M_PI / 2, axisY.max);
-				cmds.push_back(draw_command{OP_MOVETO, cx, cy, 0.0f, "", 50});
-				cmds.push_back(draw_command{OP_LINETO, xx.first, xx.second, 0.0f, "", 50});
-			}
-
-		} else if (coord ==  COORD_CARTESIAN) {
-
-			float pxMin = ToPixelX(axisX.min);
-			float pxMax = ToPixelX(axisX.max);
-			float pyMin = ToPixelY(axisY.min);
-			float pyMax = ToPixelY(axisY.max);
-
-			auto xTickValues = axisX.calculateTicks(xTicksCount);
-			for (float x : xTickValues) {
-				float px = ToPixelX(x);
-
-				cmds.push_back(draw_command{OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, "#C0C0C0", 10});
-				cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, ":", 10});
-				cmds.push_back(draw_command{OP_MOVETO, px, pyMin+1, 0.0f, "", 10});
-				cmds.push_back(draw_command{OP_LINETO, px, pyMax, 0.0f, "", 10});
-
-				cmds.push_back(draw_command{OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, "#333333", 10});
-				cmds.push_back(draw_command{OP_DRAW_TEXT, px-6.0f, pyMin+15.0f, 0.0f, "", 10});
-				safe_strncpy(cmds.back().argc1, FormatNumber(x, axisX.scale).c_str(), sizeof(draw_command::argc1));
-			}
-
-			auto yTickValues = axisY.calculateTicks(yTicksCount);
-			for (float y : yTickValues) {
-				float py = ToPixelY(y);
-
-				cmds.push_back(draw_command{OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, "#C0C0C0", 10});
-				cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, ":", 10});
-				cmds.push_back(draw_command{OP_MOVETO, pxMin+1, py, 0.0f, "", 10});
-				cmds.push_back(draw_command{OP_LINETO, pxMax, py, 0.0f, "", 10});
-
-				cmds.push_back(draw_command{OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, "#0000FF", 10});
-				cmds.push_back(draw_command{OP_DRAW_TEXT, pxMin-45.0f, py-6.0f, 0.0f, "", 10});
-				safe_strncpy(cmds.back().argc1, FormatNumber(y, axisY.scale).c_str(), sizeof(draw_command::argc1));
-			}
-
-			if (axisY2.visible) {
-				auto y2TickValues = axisY2.calculateTicks(yTicksCount);
-
-				for (float y2 : y2TickValues) {
-					float py = ToPixelY(y2, AXIS_SECONDARY);
-
-					cmds.push_back(draw_command{OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, "#008000", 10});
-					cmds.push_back(draw_command{OP_DRAW_TEXT, pxMax+10.0f, py-6.0f, 0.0f, "", 10});
-					safe_strncpy(cmds.back().argc1, FormatNumber(y2, axisY2.scale).c_str(), sizeof(draw_command::argc1));
-				}
-			}
-
-			cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, "-", 50});
-			cmds.push_back(draw_command{OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, "#000000", 50});
-			cmds.push_back(draw_command{OP_SET_LINE_WIDTH, 0.0f, 0.0f, 1.5f, "", 50});
-			cmds.push_back(draw_command{OP_MOVETO, pxMin, pyMax, 0.0f, "", 50});
-			cmds.push_back(draw_command{OP_LINETO, pxMin, pyMin, 0.0f, "", 50});
-			cmds.push_back(draw_command{OP_LINETO, pxMax, pyMin, 0.0f, "", 50});
-			if (axisY2.visible)
-				cmds.push_back(draw_command{OP_LINETO, pxMax, pyMax, 0.0f, "", 50});
-		}
-
-		int nret = std::min(cmds.size(), nout);
-		for (int i = 0; i < nret; i++) {
-			out[i] = cmds.data()[i];
-		}
-		return nret;
-	}
 };
 
 #endif // LIBPLOT_HPP

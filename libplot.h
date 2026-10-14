@@ -48,6 +48,11 @@ enum {
 	AXIS_SECONDARY = 1
 };
 
+enum {
+	SCALE_LINEAR = 0,
+	SCALE_LOG = 1
+};
+
 EXPORT_C void *create_figure(int coord);
 EXPORT_C void destroy_figure(void *fig);
 
