@@ -148,13 +148,6 @@ EXPORT_C int show(void *fig_, struct draw_command *out, int nout)
 #include <sstream>
 #include <iomanip>
 
-static char *safe_strncpy(char *buf, const char *src, size_t bufsize)
-{
-	std::strncpy(buf, src, bufsize - 1);
-	buf[bufsize - 1] = '\0';
-	return buf;
-}
-
 static std::string FormatNumber(double val, int scale)
 {
 	std::ostringstream oss;
@@ -166,130 +159,169 @@ static std::string FormatNumber(double val, int scale)
 	return oss.str();
 }
 
+inline struct draw_command draw_command_(int op, float x, float y, float argf1, const std::string& argc1, int zIndex)
+{
+    struct draw_command cmd{op, x, y, argf1, "", zIndex };
+    strncpy_s(cmd.argc1, sizeof(cmd.argc1), argc1.c_str(), _TRUNCATE);
+    return cmd;
+}
+
 int Figure::show(struct draw_command *out, size_t nout) const
 {
 	std::vector<struct draw_command> cmds;
-	int xTicksCount = 10;//static_cast<int>(GetOpt("xTargetTicks", 6.0));
-	int yTicksCount = 5;//static_cast<int>(GetOpt("leftYTargetTicks", 5.0));
 
 	if (coord == COORD_POLAR) {
 		auto [cx, cy] = ToPolarPixel(0.0, 0.0);
 
-		auto yTickValues = axisY.calculateTicks(yTicksCount);
-		for (float r : yTickValues) {
+		for (float theta : axisX.calculateTicks()) {
+			if (theta <= axisX.min)
+				continue;
+			std::pair<float, float> outer_edge = ToPolarPixel(theta, axisY.max);
+
+			if (axisX.grid.visible) {
+				cmds.push_back(draw_command_(OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, axisX.grid.color, 10));
+				cmds.push_back(draw_command_(OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, axisX.grid.style, 10));
+				cmds.push_back(draw_command_(OP_SET_LINE_WIDTH, 0.0f, 0.0f, 1, "", 10));
+				cmds.push_back(draw_command_(OP_MOVETO, cx, cy, 0.0f, "", 10));
+				cmds.push_back(draw_command_(OP_LINETO, outer_edge.first, outer_edge.second, 0.0f, "", 10));
+			}
+
+			if (axisX.tick.visible) {
+				float text_px = outer_edge.first + 15.0f * static_cast<float>(std::cos(theta));
+				float text_py = outer_edge.second - 15.0f * static_cast<float>(std::sin(theta));
+				cmds.push_back(draw_command_(OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, axisX.tick.color, 10));
+				cmds.push_back(draw_command_(OP_SET_TEXT_FONT, 0.0f, 0.0f, 0.0f, axisX.tick.font, 10));
+				cmds.push_back(draw_command_(OP_DRAW_TEXT, text_px, text_py, theta+(theta>M_PI?M_PI_2:-M_PI_2), FormatNumber(180 * theta / M_PI, SCALE_LINEAR), 10));
+			}
+		}
+
+		for (float r : axisY.calculateTicks()) {
 			if (r <= axisY.min)
 				continue;
 			std::pair<float, float> edge = ToPolarPixel(0.0, r);
 			float pixelR = std::abs(edge.first - cx);
 			if (pixelR > 0) {
-				cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, ":", 10});
-				cmds.push_back(draw_command{OP_DRAW_CIRCLE, cx, cy, pixelR, "", 10});
-				cmds.push_back(draw_command{OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, "#C0C0C0", 10});
-				cmds.push_back(draw_command{OP_DRAW_TEXT, edge.first, edge.second-2.0f, 0.0f, "", 10});
-				safe_strncpy(cmds.back().argc1, FormatNumber(r, SCALE_LINEAR).c_str(), sizeof(draw_command::argc1));
+				if (axisY.grid.visible) {
+					cmds.push_back(draw_command_(OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, axisY.grid.color, 10));
+					cmds.push_back(draw_command_(OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, axisY.grid.style, 10));
+					cmds.push_back(draw_command_(OP_SET_LINE_WIDTH, 0.0f, 0.0f, 1, "", 10));
+					cmds.push_back(draw_command_(OP_DRAW_CIRCLE, cx, cy, pixelR, "", 10));
+				}
+				if (axisY.tick.visible) {
+					cmds.push_back(draw_command_(OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, axisY.tick.color, 10));
+					cmds.push_back(draw_command_(OP_SET_TEXT_FONT, 0.0f, 0.0f, 0.0f, axisY.tick.font, 10));
+					cmds.push_back(draw_command_(OP_DRAW_TEXT, edge.first, edge.second-2.0f, 0.0f, FormatNumber(r, SCALE_LINEAR), 10));
+				}
 			}
 		}
 
-		auto xTickValues = axisX.calculateTicks(xTicksCount);
-		for (float theta : xTickValues) {
-			if (theta <= axisX.min)
-				continue;
-			std::pair<float, float> outer_edge = ToPolarPixel(theta, axisY.max);
-
-			cmds.push_back(draw_command{OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, "#C0C0C0", 10});
-			cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, ":", 10});
-			cmds.push_back(draw_command{OP_MOVETO, cx, cy, 0.0f, "", 10});
-			cmds.push_back(draw_command{OP_LINETO, outer_edge.first, outer_edge.second, 0.0f, "", 10});
-
-			float text_px = outer_edge.first + 15.0f * static_cast<float>(std::cos(theta));
-			float text_py = outer_edge.second - 15.0f * static_cast<float>(std::sin(theta));
-			cmds.push_back(draw_command{OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, "#000000", 10});
-			cmds.push_back(draw_command{OP_DRAW_TEXT, text_px, text_py, 0.0f, "", 10});
-			safe_strncpy(cmds.back().argc1, FormatNumber(180 * theta / M_PI, SCALE_LINEAR).c_str(), sizeof(draw_command::argc1));
+		std::pair<float, float> max_edge = ToPolarPixel(0.0, axisY.max);
+		if (axisX.visible) {
+			float max_pixel_r = std::abs(max_edge.first - cx);
+			if (max_pixel_r > 0) {
+				cmds.push_back(draw_command_(OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, axisX.color, 50));
+				cmds.push_back(draw_command_(OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, axisX.style, 50));
+				cmds.push_back(draw_command_(OP_SET_LINE_WIDTH, 0.0f, 0.0f, axisX.width, "", 50));
+				cmds.push_back(draw_command_(OP_DRAW_CIRCLE, cx, cy, max_pixel_r, "", 50));
+			}
 		}
 
-		std::pair<float, float> max_edge = ToPolarPixel(0.0, axisY.max);
-		float max_pixel_r = std::abs(max_edge.first - cx);
-		if (max_pixel_r > 0) {
-			cmds.push_back(draw_command{OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, "#000000", 50});
-			cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, "-", 50});
-			cmds.push_back(draw_command{OP_SET_LINE_WIDTH, 0.0f, 0.0f, 1.5f, "", 50});
-			cmds.push_back(draw_command{OP_DRAW_CIRCLE, cx, cy, max_pixel_r, "", 50});
+		if (axisY.visible) {
+			cmds.push_back(draw_command_(OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, axisY.color, 50));
+			cmds.push_back(draw_command_(OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, axisY.style, 50));
+			cmds.push_back(draw_command_(OP_SET_LINE_WIDTH, 0.0f, 0.0f, axisY.width, "", 50));
 
-			std::pair<float, float> xx;
+			std::pair<float, float> max_edge2;
 
-			xx = ToPolarPixel(0, axisY.max);
-			cmds.push_back(draw_command{OP_MOVETO, cx, cy, 0.0f, "", 50});
-			cmds.push_back(draw_command{OP_LINETO, xx.first, xx.second, 0.0f, "", 50});
+			//max_edge = ToPolarPixel(0.0, axisY.max);
+			max_edge2 = ToPolarPixel(M_PI, axisY.max);
+			cmds.push_back(draw_command_(OP_MOVETO, max_edge.first, max_edge.second, 0.0f, "", 50));
+			cmds.push_back(draw_command_(OP_LINETO, max_edge2.first, max_edge2.second, 0.0f, "", 50));
 
-			xx = ToPolarPixel(M_PI / 2, axisY.max);
-			cmds.push_back(draw_command{OP_MOVETO, cx, cy, 0.0f, "", 50});
-			cmds.push_back(draw_command{OP_LINETO, xx.first, xx.second, 0.0f, "", 50});
-
-			xx = ToPolarPixel(M_PI, axisY.max);
-			cmds.push_back(draw_command{OP_MOVETO, cx, cy, 0.0f, "", 50});
-			cmds.push_back(draw_command{OP_LINETO, xx.first, xx.second, 0.0f, "", 50});
-
-			xx = ToPolarPixel(3 * M_PI / 2, axisY.max);
-			cmds.push_back(draw_command{OP_MOVETO, cx, cy, 0.0f, "", 50});
-			cmds.push_back(draw_command{OP_LINETO, xx.first, xx.second, 0.0f, "", 50});
+			max_edge = ToPolarPixel(M_PI_2, axisY.max);
+			max_edge2 = ToPolarPixel(3 * M_PI_2, axisY.max);
+			cmds.push_back(draw_command_(OP_MOVETO, max_edge.first, max_edge.second, 0.0f, "", 50));
+			cmds.push_back(draw_command_(OP_LINETO, max_edge2.first, max_edge2.second, 0.0f, "", 50));
 		}
 
 	} else if (coord ==  COORD_CARTESIAN) {
 
 		float pxMin = ToPixelX(axisX.min);
 		float pxMax = ToPixelX(axisX.max);
-		float pyMin = ToPixelY(axisY.min);
-		float pyMax = ToPixelY(axisY.max);
+		float pyMin = ToPixelY(axisY.max);//!
+		float pyMax = ToPixelY(axisY.min);//!
 
-		auto xTickValues = axisX.calculateTicks(xTicksCount);
-		for (float x : xTickValues) {
+		for (float x : axisX.calculateTicks()) {
 			float px = ToPixelX(x);
 
-			cmds.push_back(draw_command{OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, "#C0C0C0", 10});
-			cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, ":", 10});
-			cmds.push_back(draw_command{OP_MOVETO, px, pyMin+1, 0.0f, "", 10});
-			cmds.push_back(draw_command{OP_LINETO, px, pyMax, 0.0f, "", 10});
+			if (axisX.grid.visible) {
+				cmds.push_back(draw_command_(OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, axisX.grid.color, 10));
+				cmds.push_back(draw_command_(OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, axisX.grid.style, 10));
+				cmds.push_back(draw_command_(OP_SET_LINE_WIDTH, 0.0f, 0.0f, 1, "", 10));
+				cmds.push_back(draw_command_(OP_MOVETO, px, pyMin, 0.0f, "", 10));
+				cmds.push_back(draw_command_(OP_LINETO, px, pyMax, 0.0f, "", 10));
+			}
 
-			cmds.push_back(draw_command{OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, "#333333", 10});
-			cmds.push_back(draw_command{OP_DRAW_TEXT, px-6.0f, pyMin+15.0f, 0.0f, "", 10});
-			safe_strncpy(cmds.back().argc1, FormatNumber(x, axisX.scale).c_str(), sizeof(draw_command::argc1));
-		}
-
-		auto yTickValues = axisY.calculateTicks(yTicksCount);
-		for (float y : yTickValues) {
-			float py = ToPixelY(y);
-
-			cmds.push_back(draw_command{OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, "#C0C0C0", 10});
-			cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, ":", 10});
-			cmds.push_back(draw_command{OP_MOVETO, pxMin+1, py, 0.0f, "", 10});
-			cmds.push_back(draw_command{OP_LINETO, pxMax, py, 0.0f, "", 10});
-
-			cmds.push_back(draw_command{OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, "#0000FF", 10});
-			cmds.push_back(draw_command{OP_DRAW_TEXT, pxMin-45.0f, py-6.0f, 0.0f, "", 10});
-			safe_strncpy(cmds.back().argc1, FormatNumber(y, axisY.scale).c_str(), sizeof(draw_command::argc1));
-		}
-
-		if (axisY2.visible) {
-			auto y2TickValues = axisY2.calculateTicks(yTicksCount);
-
-			for (float y2 : y2TickValues) {
-				float py = ToPixelY(y2, AXIS_SECONDARY);
-
-				cmds.push_back(draw_command{OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, "#008000", 10});
-				cmds.push_back(draw_command{OP_DRAW_TEXT, pxMax+10.0f, py-6.0f, 0.0f, "", 10});
-				safe_strncpy(cmds.back().argc1, FormatNumber(y2, axisY2.scale).c_str(), sizeof(draw_command::argc1));
+			if (axisX.tick.visible) {
+				cmds.push_back(draw_command_(OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, axisX.tick.color, 10));
+				cmds.push_back(draw_command_(OP_SET_TEXT_FONT, 0.0f, 0.0f, 0.0f, axisX.tick.font, 10));
+				cmds.push_back(draw_command_(OP_DRAW_TEXT, px-6.0f, pyMax+15.0f, 0.0f, FormatNumber(x, axisX.scale), 10));
 			}
 		}
 
-		cmds.push_back(draw_command{OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, "-", 50});
-		cmds.push_back(draw_command{OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, "#000000", 50});
-		cmds.push_back(draw_command{OP_SET_LINE_WIDTH, 0.0f, 0.0f, 1.5f, "", 50});
-		cmds.push_back(draw_command{OP_MOVETO, pxMin, pyMax, 0.0f, "", 50});
-		cmds.push_back(draw_command{OP_LINETO, pxMin, pyMin, 0.0f, "", 50});
-		cmds.push_back(draw_command{OP_LINETO, pxMax, pyMin, 0.0f, "", 50});
-		if (axisY2.visible)
-			cmds.push_back(draw_command{OP_LINETO, pxMax, pyMax, 0.0f, "", 50});
+		for (float y : axisY.calculateTicks()) {
+			float py = ToPixelY(y);
+
+			if (axisY.grid.visible || (axisY2.visible && axisY2.grid.visible)) {
+				cmds.push_back(draw_command_(OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, axisY.grid.color, 10));
+				cmds.push_back(draw_command_(OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, axisY.grid.style, 10));
+				cmds.push_back(draw_command_(OP_SET_LINE_WIDTH, 0.0f, 0.0f, 1, "", 10));
+				cmds.push_back(draw_command_(OP_MOVETO, pxMin, py, 0.0f, "", 10));
+				cmds.push_back(draw_command_(OP_LINETO, pxMax, py, 0.0f, "", 10));
+			}
+
+			if (axisY.tick.visible) {
+				cmds.push_back(draw_command_(OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, axisY.tick.color, 10));
+				cmds.push_back(draw_command_(OP_SET_TEXT_FONT, 0.0f, 0.0f, 0.0f, axisY.tick.font, 10));
+				cmds.push_back(draw_command_(OP_DRAW_TEXT, pxMin-45.0f, py-6.0f, 0.0f, FormatNumber(y, axisY.scale), 10));
+			}
+		}
+
+		if (axisY2.visible) {
+			for (float y2 : axisY2.calculateTicks()) {
+				float py = ToPixelY(y2, AXIS_SECONDARY);
+				if (axisY.tick.visible) {
+					cmds.push_back(draw_command_(OP_SET_TEXT_COLOR, 0.0f, 0.0f, 0.0f, axisY2.tick.color, 10));
+					cmds.push_back(draw_command_(OP_SET_TEXT_FONT, 0.0f, 0.0f, 0.0f, axisY2.tick.font, 10));
+					cmds.push_back(draw_command_(OP_DRAW_TEXT, pxMax+10.0f, py-6.0f, 0.0f, FormatNumber(y2, axisY2.scale), 10));
+				}
+			}
+		}
+
+		if (axisX.visible) {
+			cmds.push_back(draw_command_(OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, axisX.color, 50));
+			cmds.push_back(draw_command_(OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, axisX.style, 50));
+			cmds.push_back(draw_command_(OP_SET_LINE_WIDTH, 0.0f, 0.0f, axisX.width, "", 50));
+
+			cmds.push_back(draw_command_(OP_MOVETO, pxMin, pyMax, 0.0f, "", 50));
+			cmds.push_back(draw_command_(OP_LINETO, pxMax, pyMax, 0.0f, "", 50));
+		}
+		if (axisY.visible) {
+			cmds.push_back(draw_command_(OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, axisY.color, 50));
+			cmds.push_back(draw_command_(OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, axisY.style, 50));
+			cmds.push_back(draw_command_(OP_SET_LINE_WIDTH, 0.0f, 0.0f, axisY.width, "", 50));
+
+			cmds.push_back(draw_command_(OP_MOVETO, pxMin, pyMin, 0.0f, "", 50));
+			cmds.push_back(draw_command_(OP_LINETO, pxMin, pyMax, 0.0f, "", 50));
+		}
+		if (axisY2.visible) {
+			cmds.push_back(draw_command_(OP_SET_LINE_COLOR, 0.0f, 0.0f, 0.0f, axisY2.color, 50));
+			cmds.push_back(draw_command_(OP_SET_LINE_STYLE, 0.0f, 0.0f, 0.0f, axisY2.style, 50));
+			cmds.push_back(draw_command_(OP_SET_LINE_WIDTH, 0.0f, 0.0f, axisY2.width, "", 50));
+
+			cmds.push_back(draw_command_(OP_MOVETO, pxMax, pyMin, 0.0f, "", 50));
+			cmds.push_back(draw_command_(OP_LINETO, pxMax, pyMax, 0.0f, "", 50));
+		}
 	}
 
 	int nret = std::min(cmds.size(), nout);

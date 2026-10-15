@@ -7,8 +7,36 @@
 #include <map>
 #include <algorithm>
 #include <cmath>
+#include <regex>
 
 #include "libplot.h"
+
+static float NiceNumber(float x, bool round)
+{
+	int exp = static_cast<int>(std::floor(std::log10(x)));
+	double f = x / std::pow(10.0, exp);
+	double nf;
+	if (round) {
+		if (f < 1.5)
+			nf = 1.0;
+		else if (f < 3.0)
+			nf = 2.0;
+		else if (f < 7.0)
+			nf = 5.0;
+		else
+			nf = 10.0;
+	} else {
+		if (f <= 1.0)
+			nf = 1.0;
+		else if (f <= 2.0)
+			nf = 2.0;
+		else if (f <= 5.0)
+			nf = 5.0;
+		else
+			nf = 10.0;
+	}
+	return nf * std::pow(10.0, exp);
+}
 
 class Figure;
 
@@ -22,13 +50,14 @@ enum MarkerType {
     MARKER_DIAMOND   // 'd'
 };
 
-struct TickConfig {
+struct Tick {
+    float interval = 0.0f; // 0 for auto ticks
     bool visible = true;
     std::string color = "#000000";
     std::string font; // "Arial,12"
 };
 
-struct GridConfig {
+struct Grid {
     bool visible = true;
     std::string color = "#E0E0E0";
     std::string style = ":";
@@ -48,10 +77,10 @@ struct Axis {
     bool visible = true;
 	float width = 1.0f;
     std::string color = "#000000";
+    std::string style = "-";
 
-    float tickInterval = 0.0f; // 0 for auto ticks
-    TickConfig tickConfig;
-    GridConfig gridConfig;
+    Tick tick;
+    Grid grid;
 
     bool panEnabled = true;
     bool zoomEnabled = true;
@@ -124,50 +153,28 @@ struct Axis {
 		max = newMax;
 	}
 
-	float NiceNumber(float x, bool round) const
-	{
-		int exp = static_cast<int>(std::floor(std::log10(x)));
-		double f = x / std::pow(10.0, exp);
-		double nf;
-		if (round) {
-			if (f < 1.5)
-				nf = 1.0;
-			else if (f < 3.0)
-				nf = 2.0;
-			else if (f < 7.0)
-				nf = 5.0;
-			else
-				nf = 10.0;
-		} else {
-			if (f <= 1.0)
-				nf = 1.0;
-			else if (f <= 2.0)
-				nf = 2.0;
-			else if (f <= 5.0)
-				nf = 5.0;
-			else
-				nf = 10.0;
-		}
-		return nf * std::pow(10.0, exp);
-	}
-
 	template<typename T = int>
-	std::vector<float> calculateTicks(int count) const
+	std::vector<float> calculateTicks() const
 	{
 		std::vector<float> ticks;
 
-		if (count < 2)
-			count = 2;
-
 		if (figure && figure->coord == COORD_POLAR && this == &(figure->axisX)) {
-			int divisions = (count > 4) ? 12 : 4;
-			for (int i = 0; i < divisions; ++i)
-				ticks.push_back(2 * M_PI * i / divisions);
+			float interval = tick.interval;
+			while (interval < 0)
+				interval += 2 * M_PI;
+			while (interval > 2 * M_PI)
+				interval -= 2 * M_PI;
+
+			int count = (interval > 0.0f) ? std::round(2 * M_PI / interval) : 8;
+			if (count < 4)
+				count = 4;
+			for (int i = 0; i < count; ++i)
+				ticks.push_back(2 * M_PI * i / count);
 			return ticks;
 		}
 
 		if (figure && this == &(figure->axisY2)) {
-			std::vector<float> leftTicks = figure->axisY.calculateTicks(count);
+			std::vector<float> leftTicks = figure->axisY.calculateTicks();
 
 			float leftMin = figure->axisY.min;
 			float leftMax = figure->axisY.max;
@@ -187,6 +194,19 @@ struct Axis {
 			return ticks;
 		}
 
+		float plotLength = 0.0f;
+		if (figure) {
+			if (this == &(figure->axisY) || this == &(figure->axisY2)) {
+				plotLength = figure->GetPlotHeight();
+			} else {
+				plotLength = figure->GetPlotWidth();
+			}
+		}
+
+		int count = (plotLength > 0.0f) ? std::round(plotLength / 70) : 3;
+		if (count < 3)
+			count = 3;
+
 		if (scale == SCALE_LOG) {
 			double logMin = std::log10(min);
 			double logMax = std::log10(max);
@@ -196,15 +216,19 @@ struct Axis {
 				int startExponent = (int)std::floor(logMin);
 				int endExponent   = (int)std::ceil(logMax);
 				int exponentStep = 1;
-				if (endExponent - startExponent > count && count > 1) {
-					exponentStep = (endExponent - startExponent) / (count - 1);
+				if (tick.interval > 0.0f) {
+					exponentStep = static_cast<int>(std::round(tick.interval));
 					if (exponentStep < 1)
 						exponentStep = 1;
+				} else {
+					if (endExponent - startExponent > count && count > 1) {
+						exponentStep = (endExponent - startExponent) / (count - 1);
+						if (exponentStep < 1)
+							exponentStep = 1;
+					}
 				}
-
 				double displayMin = std::pow(10.0, startExponent);
 				double displayMax = std::pow(10.0, endExponent);
-
 				for (int expv = startExponent; expv <= endExponent; expv += exponentStep) {
 					double val = std::pow(10.0, expv);
 					if (val >= displayMin - 1e-6 && val <= displayMax + 1e-6) {
@@ -212,16 +236,18 @@ struct Axis {
 							ticks.push_back((float)val);
 					}
 				}
-			} else {
-				double baseRange = NiceNumber(max - min, false);
-				double niceStep  = NiceNumber(baseRange / (count - 1), true);
-
+			}
+			else {
+				double niceStep;
+				if (tick.interval > 0.0f) {
+					niceStep = tick.interval;
+				} else {
+					double baseRange = NiceNumber(max - min, false);
+					niceStep = NiceNumber(baseRange / (count - 1), true);
+				}
 				double displayMin = std::floor(min / niceStep) * niceStep;
 				double displayMax = std::ceil(max / niceStep) * niceStep;
-
-				double start = displayMin;
-				double end   = displayMax;
-				for (double v = start; v <= end + (niceStep * 0.0001); v += niceStep) {
+				for (double v = displayMin; v <= displayMax + (niceStep * 0.0001); v += niceStep) {
 					if (v >= min - (niceStep * 0.0001) && v <= max + (niceStep * 0.0001)) {
 						ticks.push_back((float)v);
 					}
@@ -231,8 +257,8 @@ struct Axis {
 		}
 
 		double niceStep;
-		if (tickInterval > 0.0f) {
-			niceStep = tickInterval;
+		if (tick.interval > 0.0f) {
+			niceStep = tick.interval;
 		} else {
 			double range = NiceNumber(max - min, false);
 			niceStep = NiceNumber(range / (count - 1), true);
@@ -275,9 +301,9 @@ struct Curve {
 
 class Figure {
 private:
-	float width = 500.0f; //in pixels
-	float height = 400.0f; //in pixels
-	std::map<std::string, float> paddings = { {"L", 60}, {"T", 40}, {"R", 60}, {"B", 40}};
+	float width = 400.0f; //in pixels
+	float height = 300.0f; //ditto
+	std::map<std::string, float> paddings = {{"L", 60}, {"T", 40}, {"R", 60}, {"B", 40}}; //ditto
 
     void applyMargin() {
         if (coord == COORD_POLAR)
@@ -288,12 +314,8 @@ private:
             axisY2.applyMargin();
     }
 
-    float GetPlotWidth() const { return width - paddings.at("L") - paddings.at("R"); }
-    float GetPlotHeight() const { return height - paddings.at("T") - paddings.at("B"); }
-
 public:
 	int coord = COORD_CARTESIAN;
-	//std::string bgColor = "#FFFFFF";
 
 	Axis axisX;   // as theta in Polar
 	Axis axisY;   // primary (left) Y, as r in Polar
@@ -309,17 +331,16 @@ public:
         axisY2.figure = this;
 		axisY2.visible = false;
 
-		axisY.min = 1;//std::numeric_limits<float>::min();
-		axisY.max = 1e2;
-		//axisY.scale = SCALE_LOG;
-
 		if (coord == COORD_POLAR) {
 			axisX.min = 0.0f;
 			axisX.max = 2 * M_PI;
-
+			axisX.scale = SCALE_LINEAR;
 			axisX.panEnabled = false;
 			axisX.zoomEnabled = false;
+
+			axisY2.visible = false;
 		}
+
 		applyMargin();
     }
 
@@ -329,19 +350,8 @@ public:
         curves.clear();
     }
 
-	int show(struct draw_command *out, size_t nout) const;
-
-    int set_option(const std::string& option, const std::string& value) {
-		if (option == "figure.size") {
-			int w, h;
-			if (sscanf(value.c_str(), "%dx%d", &w, &h) == 2) {
-				width = w;
-				height = h;
-				return 0;
-			}
-		}
-		return -1;
-	}
+    float GetPlotWidth() const { return width - paddings.at("L") - paddings.at("R"); }
+    float GetPlotHeight() const { return height - paddings.at("T") - paddings.at("B"); }
 
     float ToPixelX(float mathX) const {
 		if (!std::isnormal(axisX.max - axisX.min))
@@ -505,6 +515,110 @@ public:
 		if (axisY2.visible)
 			axisY2.zoom(ToMathY(pixelY, AXIS_SECONDARY), factor);
     }
+
+
+    int set_option(const std::string& option, const std::string& value) {
+		if (option == "figure.size") {
+			int w, h;
+			if (sscanf(value.c_str(), "%dx%d", &w, &h) == 2) {
+				width = w;
+				height = h;
+				return 0;
+			}
+		} else if (std::regex_match(option, std::regex(R"(^figure\.axis(X|Y|Y2)\..+$)"))) {
+			Axis *axis = nullptr;
+			std::smatch matches;
+			if (std::regex_match(option, matches, std::regex(R"(^figure\.axis(X|Y|Y2)\.(.+)$)"))) {
+				if (matches[1] == "X")
+					axis = &axisX;
+				else if (matches[1] == "Y")
+					axis = &axisY;
+				else if (matches[1] == "Y2")
+					axis = &axisY2;
+
+				if (axis) {
+					std::string suffix = matches[2];
+
+					if (suffix == "range") {
+						if (!(coord == COORD_POLAR && axis == &axisX)) {
+							float a, b;
+							if (std::sscanf(value.c_str(), "%f , %f", &a, &b) == 2) {
+								axis->min = a;
+								axis->max = b;
+							}
+						}
+					} else if (suffix == "scale") {
+						if (!(coord == COORD_POLAR && axis == &axisX)) {
+							if (value == "linear")
+								axis->scale = SCALE_LINEAR;
+							else if (value == "log")
+								axis->scale = SCALE_LOG;
+						}
+					} else if (suffix == "visible") {
+						if (!(coord == COORD_POLAR && axis == &axisY2)) {
+							if (value == "true")
+								axis->visible = true;
+							else if (value == "false")
+								axis->visible = false;
+						}
+					} else if (suffix == "pan") {
+						if (!(coord == COORD_POLAR && axis == &axisX)) {
+							if (value == "enabled")
+								axis->panEnabled = true;
+							else if (value == "disabled")
+								axis->panEnabled = false;
+						}
+					} else if (suffix == "zoom") {
+						if (!(coord == COORD_POLAR && axis == &axisX)) {
+							if (value == "enabled")
+								axis->zoomEnabled = true;
+							else if (value == "disabled")
+								axis->zoomEnabled = false;
+						}
+					} else if (suffix == "width") {
+						float a;
+						if (std::sscanf(value.c_str(), "%f", &a) == 1) {
+							axis->width = a;
+						}
+					} else if (suffix == "color") {
+						axis->color = value;
+					} else if (suffix == "style") {
+						axis->style = value;
+					} else if (suffix == "grid.visible") {
+						if (value == "true")
+							axis->grid.visible = true;
+						else if (value == "false")
+							axis->grid.visible = false;
+					} else if (suffix == "grid.color") {
+						axis->grid.color = value;
+					} else if (suffix == "grid.style") {
+						axis->grid.style = value;
+					} else if (suffix == "tick.visible") {
+						if (value == "true")
+							axis->tick.visible = true;
+						else if (value == "false")
+							axis->tick.visible = false;
+					} else if (suffix == "tick.interval") {
+						float a;
+						if (std::sscanf(value.c_str(), "%f", &a) == 1) {
+							if (!(coord == COORD_POLAR && axis == &axisX)) {
+								axis->tick.interval = a;
+							} else {
+								axis->tick.interval = a * M_PI / 180;
+							}
+						}
+					} else if (suffix == "tick.color") {
+						axis->tick.color = value;
+					} else if (suffix == "tick.font") {
+						axis->tick.font = value;
+					}
+				}
+			}
+		}
+		return -1;
+	}
+
+	int show(struct draw_command *out, size_t nout) const;
 };
 
 #endif // LIBPLOT_HPP

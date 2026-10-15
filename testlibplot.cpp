@@ -1,6 +1,7 @@
 //
 // cl.exe /EHsc /MDd /utf-8 /Zi /I. /D_DEBUG /DUNICODE /D_UNICODE testlibplot.cpp /link /DEBUG /SUBSYSTEM:WINDOWS user32.lib gdi32.lib
 //
+#define _USE_MATH_DEFINES
 #include <windows.h>
 #include <vector>
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iostream>
+#include <sstream>
 
 #include "libplot.h"
 
@@ -77,6 +79,42 @@ HPEN CreateGDIRenderPen(int style, int width, COLORREF color) {
     return ExtCreatePen(PS_GEOMETRIC | style, width, &lb, 0, NULL);
 }
 
+HFONT CreateGDIRenderFont(HDC hdc, const std::string& fontStr) {
+    std::string fontName = "Arial";
+    int pointSize = 12;
+
+    std::stringstream ss(fontStr);
+    std::string nameToken, sizeToken;
+
+    if (std::getline(ss, nameToken, ',')) {
+        if (!nameToken.empty())
+			fontName = nameToken;
+    }
+    if (std::getline(ss, sizeToken)) {
+        if (!sizeToken.empty())
+			pointSize = std::stoi(sizeToken);
+    }
+
+    HFONT hFont = CreateFontA(
+		-MulDiv(pointSize, GetDeviceCaps(hdc, LOGPIXELSY), 72),
+        0,
+        0,
+        0,
+        FW_NORMAL,
+        FALSE,
+        FALSE,
+        FALSE,
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE,
+        fontName.c_str()
+    );
+
+    return hFont;
+}
+
 void ExecuteDrawCommands(HDC hdc, std::vector<struct draw_command>& cmds) {
     std::sort(cmds.begin(), cmds.end(), [](const struct draw_command& a, const struct draw_command& b) {
         return a.zIndex < b.zIndex;
@@ -97,8 +135,47 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct draw_command>& cmds) {
         case OP_SET_TEXT_COLOR:
             SetTextColor(hdc, convertColor(cmd.argc1));
             break;
+        case OP_SET_TEXT_FONT:
+            if (hCurFont) {
+				SelectObject(hdc, hOldFont);
+				DeleteObject(hCurFont);
+			}
+			hCurFont = CreateGDIRenderFont(hdc, cmd.argc1);
+            hOldFont = (HFONT)SelectObject(hdc, hCurFont);
+            break;
+        case OP_DRAW_TEXT: {
+		    HFONT hCurrentFont = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
+
+		    LOGFONTA lf = { 0 };
+		    GetObjectA(hCurrentFont, sizeof(LOGFONTA), &lf);
+
+		    long gdiAngle = static_cast<long>(10 * cmd.argf1 * 180 / M_PI);
+		    lf.lfEscapement = gdiAngle;
+		    lf.lfOrientation = gdiAngle;
+
+		    HFONT hRotatedFont = CreateFontIndirectA(&lf);
+
+		    if (hRotatedFont != NULL) {
+				HFONT hOldFont = (HFONT)SelectObject(hdc, hRotatedFont);
+				int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+
+				TextOutA(hdc, cmd.x, cmd.y, cmd.argc1, strlen(cmd.argc1));
+
+				SetBkMode(hdc, oldBkMode);
+				SelectObject(hdc, hOldFont);
+				DeleteObject(hRotatedFont);
+			}
+            break;
+        }
         case OP_SET_LINE_COLOR:
             curColor = convertColor(cmd.argc1);
+            SelectObject(hdc, hOldPen);
+			DeleteObject(hCurPen);
+            hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
+            hOldPen = (HPEN)SelectObject(hdc, hCurPen);
+            break;
+        case OP_SET_LINE_STYLE:
+            curLineStyle = convertLineStyle(cmd.argc1);
             SelectObject(hdc, hOldPen);
 			DeleteObject(hCurPen);
             hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
@@ -113,40 +190,15 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct draw_command>& cmds) {
             hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
             hOldPen = (HPEN)SelectObject(hdc, hCurPen);
             break;
-        case OP_SET_LINE_STYLE:
-            curLineStyle = convertLineStyle(cmd.argc1);
-            SelectObject(hdc, hOldPen);
-			DeleteObject(hCurPen);
-            hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
-            hOldPen = (HPEN)SelectObject(hdc, hCurPen);
-            break;
-        case OP_SET_TEXT_FONT:
-            if (hCurFont) {
-				SelectObject(hdc, hOldFont);
-				DeleteObject(hCurFont);
-			}
-#ifdef UNICODE
-            wchar_t wFontName[64]; MultiByteToWideChar(CP_ACP, 0, cmd.argc1, -1, wFontName, 64);
-            hCurFont = CreateFontW(-(int)cmd.argf1, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, wFontName);
-#else
-            hCurFont = CreateFontA(-(int)cmd.argf1, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, cmd.argc1);
-#endif
-            hOldFont = (HFONT)SelectObject(hdc, hCurFont);
-            break;
-        case OP_MOVETO:   MoveToEx(hdc, (int)cmd.x, (int)cmd.y, NULL); break;
-        case OP_LINETO:   LineTo(hdc, (int)cmd.x, (int)cmd.y); break;
-        case OP_DRAW_CIRCLE: Ellipse(hdc, (int)(cmd.x - cmd.argf1), (int)(cmd.y - cmd.argf1), (int)(cmd.x + cmd.argf1), (int)(cmd.y + cmd.argf1)); break;
-        case OP_DRAW_TEXT: {
-            int mode = SetBkMode(hdc, TRANSPARENT);
-#ifdef UNICODE
-            wchar_t wText[64]; MultiByteToWideChar(CP_ACP, 0, cmd.argc1, -1, wText, 64);
-            TextOutW(hdc, (int)cmd.x, (int)cmd.y, wText, lstrlenW(wText));
-#else
-            TextOutA(hdc, (int)cmd.x, (int)cmd.y, cmd.argc1, (int)strlen(cmd.argc1));
-#endif
-            SetBkMode(hdc, mode);
-            break;
-        }
+        case OP_MOVETO:
+			MoveToEx(hdc, (int)cmd.x, (int)cmd.y, NULL);
+			break;
+        case OP_LINETO:
+			LineTo(hdc, (int)cmd.x, (int)cmd.y);
+			break;
+        case OP_DRAW_CIRCLE:
+			Ellipse(hdc, (int)(cmd.x - cmd.argf1), (int)(cmd.y - cmd.argf1), (int)(cmd.x + cmd.argf1), (int)(cmd.y + cmd.argf1));
+			break;
         }
     }
     SelectObject(hdc, hOldPen);
@@ -162,7 +214,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     switch (message) {
     case WM_CREATE:
         if (pfnCreateFigure)
-			g_fig = pfnCreateFigure(COORD_CARTESIAN);
+			g_fig = pfnCreateFigure(COORD_POLAR);//CARTESIAN);
+
+		if (g_fig && pfnSetOption) {
+//			pfnSetOption(g_fig, "figure.axisX.tick.visible", "true");
+			pfnSetOption(g_fig, "figure.axisX.grid.visible", "false");
+//			pfnSetOption(g_fig, "figure.axisY.visible", "true");
+			pfnSetOption(g_fig, "figure.axisY.color", "#0000FF");
+			pfnSetOption(g_fig, "figure.axisY.tick.color", "#FF0000");
+			pfnSetOption(g_fig, "figure.axisY.grid.color", "#00FF00");
+			pfnSetOption(g_fig, "figure.axisY.range", "1,1e5");
+			pfnSetOption(g_fig, "figure.axisY.scale", "log");
+		}
 
 		break;
 
