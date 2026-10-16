@@ -168,23 +168,17 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct draw_command>& cmds) {
             break;
         }
         case OP_SET_LINE_COLOR:
-            curColor = convertColor(cmd.argc1);
-            SelectObject(hdc, hOldPen);
-			DeleteObject(hCurPen);
-            hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
-            hOldPen = (HPEN)SelectObject(hdc, hCurPen);
-            break;
         case OP_SET_LINE_STYLE:
-            curLineStyle = convertLineStyle(cmd.argc1);
-            SelectObject(hdc, hOldPen);
-			DeleteObject(hCurPen);
-            hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
-            hOldPen = (HPEN)SelectObject(hdc, hCurPen);
-            break;
         case OP_SET_LINE_WIDTH:
-            curLineWidth = (int)cmd.argf1;
-			if (curLineWidth < 1)
-				curLineWidth = 1;
+			if (cmd.op == OP_SET_LINE_COLOR)
+				curColor = convertColor(cmd.argc1);
+			else if (cmd.op == OP_SET_LINE_STYLE)
+				curLineStyle = convertLineStyle(cmd.argc1);
+			else if (cmd.op == OP_SET_LINE_WIDTH) {
+				curLineWidth = (int)cmd.argf1;
+				if (curLineWidth < 1)
+					curLineWidth = 1;
+			}
             SelectObject(hdc, hOldPen);
 			DeleteObject(hCurPen);
             hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
@@ -266,12 +260,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             pfnPixel2Logical(g_fig, curX, curY, &logicalX, &logicalY, &logicalY2);
 
 #ifdef UNICODE
-            wchar_t szTitle[128];
-            swprintf_s(szTitle, L"Test libplot | X: %.4f, Y: %.4f, Y2: %.4f", logicalX, logicalY, logicalY2);
+            wchar_t szTitle[256];
+            swprintf_s(szTitle, L"Test libplot | X: %.4f(px: %d), Y: %.4f(py: %d), Y2: %.4f", logicalX, curX, logicalY, curY, logicalY2);
             SetWindowTextW(hWnd, szTitle);
 #else
-            char szTitle[128];
-            sprintf_s(szTitle, "Test libplot | X: %.4f, Y: %.4f, Y2: %.4f", logicalX, logicalY, logicalY2);
+            char szTitle[256];
+            sprintf_s(szTitle, "Test libplot | X: %.4f(px: %d), Y: %.4f(py: %d), Y2: %.4f", logicalX, curX, logicalY, curY, logicalY2);
             SetWindowTextA(hWnd, szTitle);
 #endif
         }

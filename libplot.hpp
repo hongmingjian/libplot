@@ -59,7 +59,7 @@ struct Tick {
 
 struct Grid {
     bool visible = true;
-    std::string color = "#E0E0E0";
+    std::string color = "#C0C0C0";
     std::string style = ":";
 };
 
