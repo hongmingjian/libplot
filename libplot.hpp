@@ -14,8 +14,8 @@
 static float NiceNumber(float x, bool round)
 {
 	int exp = static_cast<int>(std::floor(std::log10(x)));
-	double f = x / std::pow(10.0, exp);
-	double nf;
+	float f = x / std::pow(10.0, exp);
+	float nf;
 	if (round) {
 		if (f < 1.5)
 			nf = 1.0;
@@ -90,10 +90,10 @@ struct Axis {
         if (ratioMargin <= 0.0f)
 			return;
 
-		double d;
+		float d;
         if (scale == SCALE_LOG) {
-            double logMin = std::log10(min);
-            double logMax = std::log10(max);
+            float logMin = std::log10(min);
+            float logMax = std::log10(max);
 			d = (logMax - logMin) * ratioMargin;
             min = std::pow(10.0, logMin + d);
             max = std::pow(10.0, logMax + d);
@@ -126,11 +126,11 @@ struct Axis {
 			return;
 		if (factor <= 0)
 			return;
-		if (!std::isnormal(max - min))
+		if (max <= min || !std::isnormal(max - min))
 			return;
 
-		double newMin = min;
-		double newMax = max;
+		float newMin = min;
+		float newMax = max;
 
 		if (scale == SCALE_LOG) {
 			newMin = std::log10(newMin);
@@ -148,6 +148,14 @@ struct Axis {
 
 		if (newMax <= newMin || !std::isnormal(newMax - newMin))
 			return;
+
+		if (factor < 1) {
+			float magnitude = std::max(std::abs(newMin), std::abs(newMax));
+			if (magnitude == 0.0f)
+				magnitude = 1.0f;
+			if ((newMax - newMin) / magnitude < 10.0f * std::numeric_limits<float>::epsilon())
+				return;
+		}
 
 		min = newMin;
 		max = newMax;
@@ -182,8 +190,8 @@ struct Axis {
 
 			if (std::isnormal(leftRange)) {
 				if (scale == SCALE_LOG) {
-					double logMin2 = std::log10(min);
-					double logMax2 = std::log10(max);
+					float logMin2 = std::log10(min);
+					float logMax2 = std::log10(max);
 					for (float leftVal : leftTicks)
 						ticks.push_back(std::pow(10.0, logMin2 + (logMax2 - logMin2) * (leftVal - leftMin) / leftRange));
 				} else {
@@ -208,9 +216,9 @@ struct Axis {
 			count = 3;
 
 		if (scale == SCALE_LOG) {
-			double logMin = std::log10(min);
-			double logMax = std::log10(max);
-			double decadeRange = logMax - logMin;
+			float logMin = std::log10(min);
+			float logMax = std::log10(max);
+			float decadeRange = logMax - logMin;
 
 			if (decadeRange >= 1.0) {
 				int startExponent = (int)std::floor(logMin);
@@ -227,10 +235,10 @@ struct Axis {
 							exponentStep = 1;
 					}
 				}
-				double displayMin = std::pow(10.0, startExponent);
-				double displayMax = std::pow(10.0, endExponent);
+				float displayMin = std::pow(10.0, startExponent);
+				float displayMax = std::pow(10.0, endExponent);
 				for (int expv = startExponent; expv <= endExponent; expv += exponentStep) {
-					double val = std::pow(10.0, expv);
+					float val = std::pow(10.0, expv);
 					if (val >= displayMin - 1e-6 && val <= displayMax + 1e-6) {
 						if (val >= min && val <= max)
 							ticks.push_back((float)val);
@@ -238,16 +246,16 @@ struct Axis {
 				}
 			}
 			else {
-				double niceStep;
+				float niceStep;
 				if (tick.interval > 0.0f) {
 					niceStep = tick.interval;
 				} else {
-					double baseRange = NiceNumber(max - min, false);
+					float baseRange = NiceNumber(max - min, false);
 					niceStep = NiceNumber(baseRange / (count - 1), true);
 				}
-				double displayMin = std::floor(min / niceStep) * niceStep;
-				double displayMax = std::ceil(max / niceStep) * niceStep;
-				for (double v = displayMin; v <= displayMax + (niceStep * 0.0001); v += niceStep) {
+				float displayMin = std::floor(min / niceStep) * niceStep;
+				float displayMax = std::ceil(max / niceStep) * niceStep;
+				for (float v = displayMin; v <= displayMax + (niceStep * 0.0001); v += niceStep) {
 					if (v >= min - (niceStep * 0.0001) && v <= max + (niceStep * 0.0001)) {
 						ticks.push_back((float)v);
 					}
@@ -256,17 +264,17 @@ struct Axis {
 			return ticks;
 		}
 
-		double niceStep;
+		float niceStep;
 		if (tick.interval > 0.0f) {
 			niceStep = tick.interval;
 		} else {
-			double range = NiceNumber(max - min, false);
+			float range = NiceNumber(max - min, false);
 			niceStep = NiceNumber(range / (count - 1), true);
 		}
 
-		double start = std::floor(min / niceStep) * niceStep;
-		double end   = std::ceil(max / niceStep) * niceStep;
-		for (double v = start; v <= end + (niceStep * 0.0001); v += niceStep) {
+		float start = std::floor(min / niceStep) * niceStep;
+		float end   = std::ceil(max / niceStep) * niceStep;
+		for (float v = start; v <= end + (niceStep * 0.0001); v += niceStep) {
 			if (v >= min - (niceStep * 0.0001) && v <= max + (niceStep * 0.0001)) {
 				ticks.push_back((float)v);
 			}
@@ -358,9 +366,9 @@ public:
 			return std::numeric_limits<float>::quiet_NaN();
 
         if (axisX.scale == SCALE_LOG) {
-            double logX = std::log10(mathX);
-            double logMin = std::log10(axisX.min);
-            double logMax = std::log10(axisX.max);
+            float logX = std::log10(mathX);
+            float logMin = std::log10(axisX.min);
+            float logMax = std::log10(axisX.max);
 
             return paddings.at("L") + GetPlotWidth() * (logX - logMin) / (logMax - logMin);
         }
@@ -374,9 +382,9 @@ public:
 			return std::numeric_limits<float>::quiet_NaN();
 
         if (axis.scale == SCALE_LOG) {
-            double logY = std::log10(mathY);
-            double logMin = std::log10(axis.min);
-            double logMax = std::log10(axis.max);
+            float logY = std::log10(mathY);
+            float logMin = std::log10(axis.min);
+            float logMax = std::log10(axis.max);
             return (height - paddings.at("B")) - GetPlotHeight() * (logY - logMin) / (logMax - logMin);
         }
         return (height - paddings.at("B")) - GetPlotHeight() * (mathY - axis.min) / (axis.max - axis.min);
@@ -384,8 +392,8 @@ public:
 
     float ToMathX(float pixelX) const {
         if (axisX.scale == SCALE_LOG) {
-            double logMin = std::log10(axisX.min);
-            double logMax = std::log10(axisX.max);
+            float logMin = std::log10(axisX.min);
+            float logMax = std::log10(axisX.max);
             return std::pow(10.0, logMin + (logMax - logMin) * (pixelX - paddings.at("L")) / GetPlotWidth());
         }
         return axisX.min + (axisX.max - axisX.min) * (pixelX - paddings.at("L")) / GetPlotWidth();
@@ -394,16 +402,16 @@ public:
     float ToMathY(float pixelY, int which = AXIS_PRIMARY) const {
 		const Axis& axis = (which == AXIS_SECONDARY) ? axisY2 : axisY;
         if (axis.scale == SCALE_LOG) {
-            double logMin = std::log10(axis.min);
-            double logMax = std::log10(axis.max);
+            float logMin = std::log10(axis.min);
+            float logMax = std::log10(axis.max);
             return std::pow(10.0, logMin + (logMax - logMin) * (height - paddings.at("B") - pixelY) / GetPlotHeight());
         }
         return axis.min + (axis.max - axis.min) * (height - paddings.at("B") - pixelY) / GetPlotHeight();
     }
 
     std::pair<float, float> ToPolarPixel(float theta, float r) const {
-        double cx = paddings.at("L") + GetPlotWidth() / 2.0f;
-        double cy = paddings.at("T") + GetPlotHeight() / 2.0f;
+        float cx = paddings.at("L") + GetPlotWidth() / 2.0f;
+        float cy = paddings.at("T") + GetPlotHeight() / 2.0f;
 
 		if (r == 0.0f)
 			return {cx, cy};
@@ -412,7 +420,7 @@ public:
 			return {std::numeric_limits<float>::quiet_NaN(),
 				    std::numeric_limits<float>::quiet_NaN()};
 
-		double rmin, rmax;
+		float rmin, rmax;
         if (axisY.scale == SCALE_LOG) {
             r = std::log10(r);
             rmin = std::log10(axisY.min);
@@ -422,26 +430,26 @@ public:
 			rmax = axisY.max;
         }
 
-        double maxPixelR = std::min(GetPlotWidth(), GetPlotHeight()) / 2.0f;
+        float maxPixelR = std::min(GetPlotWidth(), GetPlotHeight()) / 2.0f;
         return {cx + maxPixelR * (r - rmin) / (rmax - rmin) * std::cos(theta),
                 cy - maxPixelR * (r - rmin) / (rmax - rmin) * std::sin(theta)};
     }
 
     std::pair<float, float> ToPolarMath(float pixelX, float pixelY) const {
-        double cx = paddings.at("L") + GetPlotWidth() / 2.0f;
-        double cy = paddings.at("T") + GetPlotHeight() / 2.0f;
-        double maxPixelR = std::min(GetPlotWidth(), GetPlotHeight()) / 2.0f;
+        float cx = paddings.at("L") + GetPlotWidth() / 2.0f;
+        float cy = paddings.at("T") + GetPlotHeight() / 2.0f;
+        float maxPixelR = std::min(GetPlotWidth(), GetPlotHeight()) / 2.0f;
 
-        double dx = pixelX - cx;
-        double dy = cy - pixelY;
+        float dx = pixelX - cx;
+        float dy = cy - pixelY;
         float theta = std::atan2(dy, dx);
         if (theta < 0)
             theta += 2.0 * M_PI;
         float r;
 
         if (axisY.scale == SCALE_LOG) {
-            double logMin = std::log10(axisY.min);
-            double logMax = std::log10(axisY.max);
+            float logMin = std::log10(axisY.min);
+            float logMax = std::log10(axisY.max);
 
             r = std::pow(10.0, logMin + (logMax - logMin) * std::sqrt(dx * dx + dy * dy) / maxPixelR);
         } else {
@@ -469,8 +477,8 @@ public:
         if (pixelXDelta == 0 && pixelYDelta == 0)
 			return;
 
-        double plotWidth  = GetPlotWidth();
-        double plotHeight = GetPlotHeight();
+        float plotWidth  = GetPlotWidth();
+        float plotHeight = GetPlotHeight();
 
         if (pixelXDelta != 0) {
             if (axisX.scale == SCALE_LOG) {

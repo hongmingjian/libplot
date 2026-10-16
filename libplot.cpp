@@ -148,7 +148,7 @@ EXPORT_C int show(void *fig_, struct draw_command *out, int nout)
 #include <sstream>
 #include <iomanip>
 
-static std::string FormatNumber(double val, int scale)
+static std::string FormatNumber(float val, int scale)
 {
 	std::ostringstream oss;
 	if (scale == SCALE_LOG && (val >= 1000.0 || val <= 0.001)) {
