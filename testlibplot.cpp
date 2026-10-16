@@ -116,7 +116,7 @@ HFONT CreateGDIRenderFont(HDC hdc, const std::string& fontStr) {
 }
 
 void ExecuteDrawCommands(HDC hdc, std::vector<struct draw_command>& cmds) {
-    std::sort(cmds.begin(), cmds.end(), [](const struct draw_command& a, const struct draw_command& b) {
+    std::stable_sort(cmds.begin(), cmds.end(), [](const struct draw_command& a, const struct draw_command& b) {
         return a.zIndex < b.zIndex;
     });
 
