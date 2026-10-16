@@ -1,24 +1,24 @@
 #include "libplot.hpp"
 
-enum { TYPE_FIGURE, TYPE_CURVE };
+enum { TYPE_PLOT, TYPE_CURVE };
 struct Handle {
     int type;
     void *obj;
 };
 
-EXPORT_C void *create_figure(int coord)
+EXPORT_C void *create_plot(int coord)
 {
-	Figure *fig = new Figure(coord);
-	return new Handle{ TYPE_FIGURE, fig };
+	Plot *plt = new Plot(coord);
+	return new Handle{ TYPE_PLOT, plt };
 }
 
-EXPORT_C void destroy_figure(void *handle_)
+EXPORT_C void destroy_plot(void *handle_)
 {
 	if (handle_) {
 		Handle *handle = static_cast<Handle *>(handle_);
-		if (handle->type == TYPE_FIGURE) {
-			Figure *fig = static_cast<Figure *>(handle->obj);
-			delete fig;
+		if (handle->type == TYPE_PLOT) {
+			Plot *plt = static_cast<Plot *>(handle->obj);
+			delete plt;
 			delete handle;
 		}
 	}
@@ -29,8 +29,8 @@ EXPORT_C int set_option(void *handle_, const char *option, const char *value)
 	if (handle_) {
 		Handle *handle = static_cast<Handle *>(handle_);
 		switch(handle->type) {
-			case TYPE_FIGURE:
-				return static_cast<Figure *>(handle->obj)->set_option(option, value);
+			case TYPE_PLOT:
+				return static_cast<Plot *>(handle->obj)->set_option(option, value);
 				break;
 			case TYPE_CURVE:
 				return static_cast<Curve *>(handle->obj)->set_option(option, value);
@@ -40,35 +40,35 @@ EXPORT_C int set_option(void *handle_, const char *option, const char *value)
 	return -1;
 }
 
-EXPORT_C void zoom(void *fig_, int cx, int cy, float factor)
+EXPORT_C void zoom(void *plt_, int cx, int cy, float factor)
 {
-	if (fig_) {
-		Handle *handle = static_cast<Handle *>(fig_);
-		if (handle->type == TYPE_FIGURE) {
-			Figure *fig = static_cast<Figure *>(handle->obj);
-			fig->zoom(cx, cy, factor);
+	if (plt_) {
+		Handle *handle = static_cast<Handle *>(plt_);
+		if (handle->type == TYPE_PLOT) {
+			Plot *plt = static_cast<Plot *>(handle->obj);
+			plt->zoom(cx, cy, factor);
 		}
 	}
 }
 
-EXPORT_C void pan(void *fig_, int dx, int dy)
+EXPORT_C void pan(void *plt_, int dx, int dy)
 {
-	if (fig_) {
-		Handle *handle = static_cast<Handle *>(fig_);
-		if (handle->type == TYPE_FIGURE) {
-			Figure *fig = static_cast<Figure *>(handle->obj);
-			fig->pan(dx, dy);
+	if (plt_) {
+		Handle *handle = static_cast<Handle *>(plt_);
+		if (handle->type == TYPE_PLOT) {
+			Plot *plt = static_cast<Plot *>(handle->obj);
+			plt->pan(dx, dy);
 		}
 	}
 }
 
-EXPORT_C void pixel2logical(void *fig_, int px, int py, float *lx, float *ly, float *ly2)
+EXPORT_C void pixel2logical(void *plt_, int px, int py, float *lx, float *ly, float *ly2)
 {
-	if (fig_) {
-		Handle *handle = static_cast<Handle *>(fig_);
-		if (handle->type == TYPE_FIGURE) {
-			Figure *fig = static_cast<Figure *>(handle->obj);
-			fig->pixel2logical(px, py, lx, ly, ly2);
+	if (plt_) {
+		Handle *handle = static_cast<Handle *>(plt_);
+		if (handle->type == TYPE_PLOT) {
+			Plot *plt = static_cast<Plot *>(handle->obj);
+			plt->pixel2logical(px, py, lx, ly, ly2);
 		}
 	}
 }
@@ -78,13 +78,13 @@ EXPORT_C void *plot_curve(void *handle_, const float *x, const float *y, int cou
 	if (handle_ && x && y && count > 0) {
 		Handle *handle = static_cast<Handle *>(handle_);
 		switch(handle->type) {
-			case TYPE_FIGURE: {
-				Figure *fig = static_cast<Figure *>(handle->obj);
+			case TYPE_PLOT: {
+				Plot *plt = static_cast<Plot *>(handle->obj);
 				Curve *curve = new Curve();
-				curve->figure = fig;
+				curve->plot = plt;
 				curve->xData.assign(x, x + count);
 				curve->yData.assign(y, y + count);
-				fig->curves.push_back(curve);
+				plt->curves.push_back(curve);
 				return new Handle{ TYPE_CURVE, curve };
             }
 			case TYPE_CURVE: {
@@ -111,19 +111,19 @@ EXPORT_C void append_points(void *handle_, const float *x, const float *y, int c
 	}
 }
 
-EXPORT_C int remove_curve(void *fig_, void *curve_)
+EXPORT_C int remove_curve(void *plt_, void *curve_)
 {
-	if (fig_ && curve_) {
-		Handle *hfig = static_cast<Handle *>(fig_);
+	if (plt_ && curve_) {
+		Handle *hplt = static_cast<Handle *>(plt_);
 		Handle *hcurve = static_cast<Handle *>(curve_);
-		if (hfig->type == TYPE_FIGURE && hcurve->type == TYPE_CURVE) {
-			Figure *fig = static_cast<Figure *>(hfig->obj);
+		if (hplt->type == TYPE_PLOT && hcurve->type == TYPE_CURVE) {
+			Plot *plt = static_cast<Plot *>(hplt->obj);
 			Curve *curve = static_cast<Curve *>(hcurve->obj);
 
-			auto it = std::find(fig->curves.begin(), fig->curves.end(), curve);
-			if (it != fig->curves.end()) {
+			auto it = std::find(plt->curves.begin(), plt->curves.end(), curve);
+			if (it != plt->curves.end()) {
 				delete curve;//*it;
-				fig->curves.erase(it);
+				plt->curves.erase(it);
 				delete hcurve;
 				return 0;
 			}
@@ -132,13 +132,13 @@ EXPORT_C int remove_curve(void *fig_, void *curve_)
     return -1;
 }
 
-EXPORT_C int show(void *fig_, struct draw_command *out, int nout)
+EXPORT_C int show(void *plt_, struct draw_command *out, int nout)
 {
-	if (fig_) {
-		Handle *handle = static_cast<Handle *>(fig_);
-		if (handle->type == TYPE_FIGURE) {
-			Figure *fig = static_cast<Figure *>(handle->obj);
-			return fig->show(out, nout);
+	if (plt_) {
+		Handle *handle = static_cast<Handle *>(plt_);
+		if (handle->type == TYPE_PLOT) {
+			Plot *plt = static_cast<Plot *>(handle->obj);
+			return plt->show(out, nout);
 		}
 	}
 
@@ -166,7 +166,7 @@ inline struct draw_command draw_command_(int op, float x, float y, float argf1, 
     return cmd;
 }
 
-int Figure::show(struct draw_command *out, size_t nout) const
+int Plot::show(struct draw_command *out, size_t nout) const
 {
 	std::vector<struct draw_command> cmds;
 

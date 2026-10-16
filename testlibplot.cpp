@@ -13,8 +13,8 @@
 
 #include "libplot.h"
 
-typedef void* (*FuncCreateFigure)(int);
-typedef void  (*FuncDestroyFigure)(void*);
+typedef void* (*FuncCreatePlot)(int);
+typedef void  (*FuncDestroyPlot)(void*);
 //typedef int   (*FuncAddCurve)(void*, const float*, const float*, int);
 typedef int   (*FuncSetOption)(void*, const char*, const char*);
 typedef void  (*FuncPan)(void*, int, int);
@@ -23,8 +23,8 @@ typedef void  (*FuncPixel2Logical)(void *, int, int, float*, float*, float*);
 typedef int   (*FuncShow)(void*, struct draw_command *, int);
 
 HMODULE            hPlotDll         = nullptr;
-FuncCreateFigure   pfnCreateFigure  = nullptr;
-FuncDestroyFigure  pfnDestroyFigure = nullptr;
+FuncCreatePlot   pfnCreatePlot  = nullptr;
+FuncDestroyPlot  pfnDestroyPlot = nullptr;
 //FuncPlot           pfnPlot          = nullptr;
 FuncSetOption      pfnSetOption     = nullptr;
 FuncPan            pfnPan           = nullptr;
@@ -34,7 +34,7 @@ FuncShow           pfnShow          = nullptr;
 
 int g_canvasWidth  = 550;
 int g_canvasHeight = 450;
-void *g_fig = nullptr;
+void *g_plt = nullptr;
 static bool g_isPanning = false;  // 是否正在拖动
 static POINT g_lastMousePos;       // 记录上一次鼠标的像素坐标
 
@@ -207,18 +207,18 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct draw_command>& cmds) {
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE:
-        if (pfnCreateFigure)
-			g_fig = pfnCreateFigure(COORD_POLAR);//CARTESIAN);
+        if (pfnCreatePlot)
+			g_plt = pfnCreatePlot(COORD_CARTESIAN);
 
-		if (g_fig && pfnSetOption) {
-//			pfnSetOption(g_fig, "figure.axisX.tick.visible", "true");
-			pfnSetOption(g_fig, "figure.axisX.grid.visible", "false");
-//			pfnSetOption(g_fig, "figure.axisY.visible", "true");
-			pfnSetOption(g_fig, "figure.axisY.color", "#0000FF");
-			pfnSetOption(g_fig, "figure.axisY.tick.color", "#FF0000");
-			pfnSetOption(g_fig, "figure.axisY.grid.color", "#00FF00");
-			pfnSetOption(g_fig, "figure.axisY.range", "1,1e5");
-			pfnSetOption(g_fig, "figure.axisY.scale", "log");
+		if (g_plt && pfnSetOption) {
+//			pfnSetOption(g_plt, "plot.axisX.tick.visible", "true");
+//			pfnSetOption(g_plt, "plot.axisX.grid.visible", "false");
+//			pfnSetOption(g_plt, "plot.axisY.visible", "true");
+//			pfnSetOption(g_plt, "plot.axisY.color", "#0000FF");
+//			pfnSetOption(g_plt, "plot.axisY.tick.color", "#0000FF");
+//			pfnSetOption(g_plt, "plot.axisY.grid.color", "#0000FF");
+			pfnSetOption(g_plt, "plot.axisY.range", "1,1e2");
+			pfnSetOption(g_plt, "plot.axisY.scale", "linear");
 		}
 
 		break;
@@ -241,8 +241,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             int dy = curY - g_lastMousePos.y;
 
             if (dx != 0 || dy != 0) {
-                if (g_fig && pfnPan) {
-                    pfnPan(g_fig, dx, dy);
+                if (g_plt && pfnPan) {
+                    pfnPan(g_plt, dx, dy);
                 }
 
                 g_lastMousePos.x = curX;
@@ -252,12 +252,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
         }
 
-        if (g_fig && pfnPixel2Logical) {
+        if (g_plt && pfnPixel2Logical) {
             float logicalX = 0.0f;
             float logicalY = 0.0f;
             float logicalY2 = 0.0f;
 
-            pfnPixel2Logical(g_fig, curX, curY, &logicalX, &logicalY, &logicalY2);
+            pfnPixel2Logical(g_plt, curX, curY, &logicalX, &logicalY, &logicalY2);
 
 #ifdef UNICODE
             wchar_t szTitle[256];
@@ -281,7 +281,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     }
 
     case WM_MOUSEWHEEL: {
-        if (g_fig && pfnZoom) {
+        if (g_plt && pfnZoom) {
             // A. 获取滚轮滚动的距离
             // GET_WHEEL_DELTA_WPARAM 获取的值通常是 120 (向上滚) 或 -120 (向下滚)
             short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
@@ -309,7 +309,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (factor != 1.0f) {
 //				printf("factor=%f\n", factor);
 				fflush(stdout);
-                pfnZoom(g_fig, ptMouse.x, ptMouse.y, factor);
+                pfnZoom(g_plt, ptMouse.x, ptMouse.y, factor);
                 InvalidateRect(hWnd, NULL, FALSE);
             }
         }
@@ -320,10 +320,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         g_canvasWidth  = LOWORD(lParam);
         g_canvasHeight = HIWORD(lParam);
 
-		if (g_fig && pfnSetOption) {
+		if (g_plt && pfnSetOption) {
 			char buf[64];
 			sprintf_s(buf, "%dx%d", g_canvasWidth, g_canvasHeight);
-			pfnSetOption(g_fig, "figure.size", buf);
+			pfnSetOption(g_plt, "plot.size", buf);
 		}
 
         InvalidateRect(hWnd, NULL, FALSE);
@@ -346,11 +346,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         FillRect(hdcMem, &rect, hBgBrush);
         DeleteObject(hBgBrush);
 
-        if (g_fig && pfnShow) {
+        if (g_plt && pfnShow) {
 			const int MAX_OUT_COMMANDS = 1024;
 			std::vector<struct draw_command> out_cmds(MAX_OUT_COMMANDS);
 
-			int actual_count = pfnShow(g_fig, out_cmds.data(), MAX_OUT_COMMANDS);
+			int actual_count = pfnShow(g_plt, out_cmds.data(), MAX_OUT_COMMANDS);
 
 			if (actual_count > 0) {
 				ExecuteDrawCommands(hdcMem, out_cmds);
@@ -369,8 +369,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
     case WM_DESTROY:
-		if (g_fig && pfnDestroyFigure)
-			pfnDestroyFigure(g_fig);
+		if (g_plt && pfnDestroyPlot)
+			pfnDestroyPlot(g_plt);
         PostQuitMessage(0);
         break;
     default:
@@ -388,8 +388,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     hPlotDll = LoadLibrary(L"debug\\libplot.dll");
     if (hPlotDll) {
-        pfnCreateFigure  = (FuncCreateFigure)GetProcAddress(hPlotDll, "create_figure");
-        pfnDestroyFigure = (FuncDestroyFigure)GetProcAddress(hPlotDll, "destroy_figure");
+        pfnCreatePlot  = (FuncCreatePlot)GetProcAddress(hPlotDll, "create_plot");
+        pfnDestroyPlot = (FuncDestroyPlot)GetProcAddress(hPlotDll, "destroy_plot");
 //        pfnPlot          = (FuncPlot)GetProcAddress(hPlotDll, "plot");
         pfnSetOption     = (FuncSetOption)GetProcAddress(hPlotDll, "set_option");
 		pfnPan           = (FuncPan)GetProcAddress(hPlotDll, "pan");

@@ -38,7 +38,7 @@ static float NiceNumber(float x, bool round)
 	return nf * std::pow(10.0, exp);
 }
 
-class Figure;
+class Plot;
 
 enum MarkerType {
     MARKER_NONE = 0,
@@ -64,7 +64,7 @@ struct Grid {
 };
 
 struct Axis {
-	Figure *figure = nullptr;
+	Plot *plot = nullptr;
 
 	//std::string name = "";
     std::string label = "";
@@ -166,7 +166,7 @@ struct Axis {
 	{
 		std::vector<float> ticks;
 
-		if (figure && figure->coord == COORD_POLAR && this == &(figure->axisX)) {
+		if (plot && plot->coord == COORD_POLAR && this == &(plot->axisX)) {
 			float interval = tick.interval;
 			while (interval < 0)
 				interval += 2 * M_PI;
@@ -181,11 +181,11 @@ struct Axis {
 			return ticks;
 		}
 
-		if (figure && this == &(figure->axisY2)) {
-			std::vector<float> leftTicks = figure->axisY.calculateTicks();
+		if (plot && this == &(plot->axisY2)) {
+			std::vector<float> leftTicks = plot->axisY.calculateTicks();
 
-			float leftMin = figure->axisY.min;
-			float leftMax = figure->axisY.max;
+			float leftMin = plot->axisY.min;
+			float leftMax = plot->axisY.max;
 			float leftRange = leftMax - leftMin;
 
 			if (std::isnormal(leftRange)) {
@@ -202,16 +202,16 @@ struct Axis {
 			return ticks;
 		}
 
-		float plotLength = 0.0f;
-		if (figure) {
-			if (this == &(figure->axisY) || this == &(figure->axisY2)) {
-				plotLength = figure->GetPlotHeight();
+		float length = 0.0f;
+		if (plot) {
+			if (this == &(plot->axisY) || this == &(plot->axisY2)) {
+				length = plot->GetClientHeight();
 			} else {
-				plotLength = figure->GetPlotWidth();
+				length = plot->GetClientWidth();
 			}
 		}
 
-		int count = (plotLength > 0.0f) ? std::round(plotLength / 70) : 3;
+		int count = (length > 0.0f) ? std::round(length / 70) : 3;
 		if (count < 3)
 			count = 3;
 
@@ -285,7 +285,7 @@ struct Axis {
 };
 
 struct Curve {
-	Figure *figure = nullptr;
+	Plot *plot = nullptr;
 
     std::string name = "";
     std::string label = "";
@@ -307,7 +307,7 @@ struct Curve {
 	}
 };
 
-class Figure {
+class Plot {
 private:
 	float width = 400.0f; //in pixels
 	float height = 300.0f; //ditto
@@ -331,12 +331,12 @@ public:
 
 	std::vector<Curve *> curves;
 
-    Figure(int coord_ = COORD_CARTESIAN) {
+    Plot(int coord_ = COORD_CARTESIAN) {
 		coord = coord_;
 
-		axisX.figure = this;
-        axisY.figure = this;
-        axisY2.figure = this;
+		axisX.plot = this;
+        axisY.plot = this;
+        axisY2.plot = this;
 		axisY2.visible = false;
 
 		if (coord == COORD_POLAR) {
@@ -352,20 +352,20 @@ public:
 		applyMargin();
     }
 
-    ~Figure() {
+    ~Plot() {
         for (Curve *c : curves)
             delete c;
         curves.clear();
     }
 
-    float GetPlotWidth() const { return width - paddings.at("L") - paddings.at("R"); }
-    float GetPlotHeight() const { return height - paddings.at("T") - paddings.at("B"); }
+    float GetClientWidth() const { return width - paddings.at("L") - paddings.at("R"); }
+    float GetClientHeight() const { return height - paddings.at("T") - paddings.at("B"); }
 
     float ToPixelX(float mathX) const {
 		if (mathX == axisX.min)
 			return paddings.at("L");
 		if (mathX == axisX.max)
-			return paddings.at("L") + GetPlotWidth();
+			return paddings.at("L") + GetClientWidth();
 
 		if (!std::isnormal(axisX.max - axisX.min))
 			return std::numeric_limits<float>::infinity();
@@ -375,9 +375,9 @@ public:
             float logMin = std::log10(axisX.min);
             float logMax = std::log10(axisX.max);
 
-            return paddings.at("L") + (logX - logMin) / (logMax - logMin) * GetPlotWidth();
+            return paddings.at("L") + (logX - logMin) / (logMax - logMin) * GetClientWidth();
         }
-        return paddings.at("L") + (mathX - axisX.min) / (axisX.max - axisX.min) * GetPlotWidth();
+        return paddings.at("L") + (mathX - axisX.min) / (axisX.max - axisX.min) * GetClientWidth();
     }
 
     float ToPixelY(float mathY, int which = AXIS_PRIMARY) const {
@@ -385,7 +385,7 @@ public:
 		if (mathY == axis.min)
 			return height - paddings.at("B");
 		if (mathY == axis.max)
-			return height - paddings.at("B") - GetPlotHeight();
+			return height - paddings.at("B") - GetClientHeight();
 
 		if (!std::isnormal(axis.max - axis.min))
 			return std::numeric_limits<float>::infinity();
@@ -394,18 +394,18 @@ public:
             float logY = std::log10(mathY);
             float logMin = std::log10(axis.min);
             float logMax = std::log10(axis.max);
-            return (height - paddings.at("B")) - (logY - logMin) / (logMax - logMin) * GetPlotHeight();
+            return (height - paddings.at("B")) - (logY - logMin) / (logMax - logMin) * GetClientHeight();
         }
-        return (height - paddings.at("B")) - (mathY - axis.min) / (axis.max - axis.min) * GetPlotHeight();
+        return (height - paddings.at("B")) - (mathY - axis.min) / (axis.max - axis.min) * GetClientHeight();
     }
 
     float ToMathX(float pixelX) const {
         if (axisX.scale == SCALE_LOG) {
             float logMin = std::log10(axisX.min);
             float logMax = std::log10(axisX.max);
-            return std::pow(10.0, logMin + (logMax - logMin) * (pixelX - paddings.at("L")) / GetPlotWidth());
+            return std::pow(10.0, logMin + (logMax - logMin) * (pixelX - paddings.at("L")) / GetClientWidth());
         }
-        return axisX.min + (axisX.max - axisX.min) * (pixelX - paddings.at("L")) / GetPlotWidth();
+        return axisX.min + (axisX.max - axisX.min) * (pixelX - paddings.at("L")) / GetClientWidth();
     }
 
     float ToMathY(float pixelY, int which = AXIS_PRIMARY) const {
@@ -413,15 +413,15 @@ public:
         if (axis.scale == SCALE_LOG) {
             float logMin = std::log10(axis.min);
             float logMax = std::log10(axis.max);
-            return std::pow(10.0, logMin + (logMax - logMin) * (height - paddings.at("B") - pixelY) / GetPlotHeight());
+            return std::pow(10.0, logMin + (logMax - logMin) * (height - paddings.at("B") - pixelY) / GetClientHeight());
         }
-        return axis.min + (axis.max - axis.min) * (height - paddings.at("B") - pixelY) / GetPlotHeight();
+        return axis.min + (axis.max - axis.min) * (height - paddings.at("B") - pixelY) / GetClientHeight();
     }
 
     std::pair<float, float> ToPolarPixel(float theta, float r) const {
-        float cx = paddings.at("L") + GetPlotWidth() / 2.0f;
-        float cy = paddings.at("T") + GetPlotHeight() / 2.0f;
-        float maxPixelR = std::min(GetPlotWidth(), GetPlotHeight()) / 2.0f;
+        float cx = paddings.at("L") + GetClientWidth() / 2.0f;
+        float cy = paddings.at("T") + GetClientHeight() / 2.0f;
+        float maxPixelR = std::min(GetClientWidth(), GetClientHeight()) / 2.0f;
 
 		if (r == 0.0f || r == axisY.min)
 			return {cx, cy};
@@ -448,9 +448,9 @@ public:
     }
 
     std::pair<float, float> ToPolarMath(float pixelX, float pixelY) const {
-        float cx = paddings.at("L") + GetPlotWidth() / 2.0f;
-        float cy = paddings.at("T") + GetPlotHeight() / 2.0f;
-        float maxPixelR = std::min(GetPlotWidth(), GetPlotHeight()) / 2.0f;
+        float cx = paddings.at("L") + GetClientWidth() / 2.0f;
+        float cy = paddings.at("T") + GetClientHeight() / 2.0f;
+        float maxPixelR = std::min(GetClientWidth(), GetClientHeight()) / 2.0f;
 
         float dx = pixelX - cx;
         float dy = cy - pixelY;
@@ -489,8 +489,8 @@ public:
         if (pixelXDelta == 0 && pixelYDelta == 0)
 			return;
 
-        float plotWidth  = GetPlotWidth();
-        float plotHeight = GetPlotHeight();
+        float plotWidth  = GetClientWidth();
+        float plotHeight = GetClientHeight();
 
         if (pixelXDelta != 0) {
             if (axisX.scale == SCALE_LOG) {
@@ -538,17 +538,17 @@ public:
 
 
     int set_option(const std::string& option, const std::string& value) {
-		if (option == "figure.size") {
+		if (option == "plot.size") {
 			int w, h;
 			if (sscanf(value.c_str(), "%dx%d", &w, &h) == 2) {
 				width = w;
 				height = h;
 				return 0;
 			}
-		} else if (std::regex_match(option, std::regex(R"(^figure\.axis(X|Y|Y2)\..+$)"))) {
+		} else if (std::regex_match(option, std::regex(R"(^plot\.axis(X|Y|Y2)\..+$)"))) {
 			Axis *axis = nullptr;
 			std::smatch matches;
-			if (std::regex_match(option, matches, std::regex(R"(^figure\.axis(X|Y|Y2)\.(.+)$)"))) {
+			if (std::regex_match(option, matches, std::regex(R"(^plot\.axis(X|Y|Y2)\.(.+)$)"))) {
 				if (matches[1] == "X")
 					axis = &axisX;
 				else if (matches[1] == "Y")

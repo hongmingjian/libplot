@@ -51,19 +51,19 @@ enum {
 	SCALE_LOG = 1
 };
 
-EXPORT_C void *create_figure(int coord);
-EXPORT_C void destroy_figure(void *fig);
+EXPORT_C void *create_plot(int coord);
+EXPORT_C void destroy_plot(void *plt);
 
 EXPORT_C int set_option(void *obj, const char *option, const char *value);
 
-EXPORT_C void pan(void *fig, int dx, int dy);
-EXPORT_C void zoom(void *fig, int cx, int cy, float factor);
-EXPORT_C void pixel2logical(void *fig, int px, int py, float *lx, float *ly, float *ly2);
+EXPORT_C void pan(void *plt, int dx, int dy);
+EXPORT_C void zoom(void *plt, int cx, int cy, float factor);
+EXPORT_C void pixel2logical(void *plt, int px, int py, float *lx, float *ly, float *ly2);
 
 EXPORT_C void *plot_curve(void *obj, const float *x, const float *y, int count);
 EXPORT_C void append_points(void *line, const float *x, const float *y, int count);
-EXPORT_C int remove_curve(void *fig, void *line);
+EXPORT_C int remove_curve(void *plt, void *line);
 
-EXPORT_C int show(void *fig, struct draw_command *out, int nout);
+EXPORT_C int show(void *plt, struct draw_command *out, int nout);
 
 #endif // LIBPLOT_H
