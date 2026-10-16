@@ -362,32 +362,41 @@ public:
     float GetPlotHeight() const { return height - paddings.at("T") - paddings.at("B"); }
 
     float ToPixelX(float mathX) const {
+		if (mathX == axisX.min)
+			return paddings.at("L");
+		if (mathX == axisX.max)
+			return paddings.at("L") + GetPlotWidth();
+
 		if (!std::isnormal(axisX.max - axisX.min))
-			return std::numeric_limits<float>::quiet_NaN();
+			return std::numeric_limits<float>::infinity();
 
         if (axisX.scale == SCALE_LOG) {
             float logX = std::log10(mathX);
             float logMin = std::log10(axisX.min);
             float logMax = std::log10(axisX.max);
 
-            return paddings.at("L") + GetPlotWidth() * (logX - logMin) / (logMax - logMin);
+            return paddings.at("L") + (logX - logMin) / (logMax - logMin) * GetPlotWidth();
         }
-        return paddings.at("L") + GetPlotWidth() * (mathX - axisX.min) / (axisX.max - axisX.min);
+        return paddings.at("L") + (mathX - axisX.min) / (axisX.max - axisX.min) * GetPlotWidth();
     }
 
     float ToPixelY(float mathY, int which = AXIS_PRIMARY) const {
 		const Axis& axis = (which == AXIS_SECONDARY) ? axisY2 : axisY;
+		if (mathY == axis.min)
+			return height - paddings.at("B");
+		if (mathY == axis.max)
+			return height - paddings.at("B") - GetPlotHeight();
 
 		if (!std::isnormal(axis.max - axis.min))
-			return std::numeric_limits<float>::quiet_NaN();
+			return std::numeric_limits<float>::infinity();
 
         if (axis.scale == SCALE_LOG) {
             float logY = std::log10(mathY);
             float logMin = std::log10(axis.min);
             float logMax = std::log10(axis.max);
-            return (height - paddings.at("B")) - GetPlotHeight() * (logY - logMin) / (logMax - logMin);
+            return (height - paddings.at("B")) - (logY - logMin) / (logMax - logMin) * GetPlotHeight();
         }
-        return (height - paddings.at("B")) - GetPlotHeight() * (mathY - axis.min) / (axis.max - axis.min);
+        return (height - paddings.at("B")) - (mathY - axis.min) / (axis.max - axis.min) * GetPlotHeight();
     }
 
     float ToMathX(float pixelX) const {
@@ -412,13 +421,17 @@ public:
     std::pair<float, float> ToPolarPixel(float theta, float r) const {
         float cx = paddings.at("L") + GetPlotWidth() / 2.0f;
         float cy = paddings.at("T") + GetPlotHeight() / 2.0f;
+        float maxPixelR = std::min(GetPlotWidth(), GetPlotHeight()) / 2.0f;
 
-		if (r == 0.0f)
+		if (r == 0.0f || r == axisY.min)
 			return {cx, cy};
+		if (r == axisY.max)
+			return {cx + maxPixelR * std::cos(theta),
+				    cy - maxPixelR * std::sin(theta)};
 
 		if (!std::isnormal(axisY.max - axisY.min))
-			return {std::numeric_limits<float>::quiet_NaN(),
-				    std::numeric_limits<float>::quiet_NaN()};
+			return {std::numeric_limits<float>::infinity(),
+				    std::numeric_limits<float>::infinity()};
 
 		float rmin, rmax;
         if (axisY.scale == SCALE_LOG) {
@@ -430,9 +443,8 @@ public:
 			rmax = axisY.max;
         }
 
-        float maxPixelR = std::min(GetPlotWidth(), GetPlotHeight()) / 2.0f;
-        return {cx + maxPixelR * (r - rmin) / (rmax - rmin) * std::cos(theta),
-                cy - maxPixelR * (r - rmin) / (rmax - rmin) * std::sin(theta)};
+        return {cx + (r - rmin) / (rmax - rmin) * maxPixelR * std::cos(theta),
+                cy - (r - rmin) / (rmax - rmin) * maxPixelR * std::sin(theta)};
     }
 
     std::pair<float, float> ToPolarMath(float pixelX, float pixelY) const {
