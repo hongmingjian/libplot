@@ -471,16 +471,16 @@ public:
         return {theta, r};
     }
 
-	void pixel2logical(int pixelX, int pixelY, float *lx, float *ly, float *ly2) const {
+	void pix2math(int pixelX, int pixelY, float *x, float *y, float *y2) const {
         if (coord == COORD_POLAR) {
 			auto mathXY = ToPolarMath(pixelX, pixelY);
-			*lx = mathXY.first;
-			*ly = mathXY.second;
+			*x = mathXY.first;
+			*y = mathXY.second;
 		} else {
-			*lx = ToMathX(pixelX);
-			*ly = ToMathY(pixelY);
+			*x = ToMathX(pixelX);
+			*y = ToMathY(pixelY);
 			if (axisY2.visible)
-				*ly2 = ToMathY(pixelY, AXIS_SECONDARY);
+				*y2 = ToMathY(pixelY, AXIS_SECONDARY);
 		}
 	}
 
@@ -638,7 +638,7 @@ public:
 		return -1;
 	}
 
-	int show(struct draw_command *out, size_t nout) const;
+	int render(struct plt_render_cmd *out, size_t nout) const;
 };
 
 #endif // LIBPLOT_HPP

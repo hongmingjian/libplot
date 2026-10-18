@@ -12,13 +12,14 @@
 #define EXPORT_C EXTERN_C __attribute__((visibility("default")))
 #endif
 
-struct draw_command {
+struct plt_render_cmd {
     int op;
+	unsigned int zIndex : 8;
+	unsigned int flags  : 24;
     float x;
     float y;
-	float argf1;
-    char argc1[64];
-    int zIndex;
+	float arg1;
+    char arg2[64];
 };
 enum {
     OP_NONE = 0,
@@ -51,19 +52,19 @@ enum {
 	SCALE_LOG = 1
 };
 
-EXPORT_C void *create_plot(int coord);
-EXPORT_C void destroy_plot(void *plt);
+EXPORT_C void *plt_create(int coord);
+EXPORT_C void plt_destroy(void *plt);
 
-EXPORT_C int set_option(void *obj, const char *option, const char *value);
+EXPORT_C int plt_set_option(void *handle, const char *option, const char *value);
 
-EXPORT_C void pan(void *plt, int dx, int dy);
-EXPORT_C void zoom(void *plt, int cx, int cy, float factor);
-EXPORT_C void pixel2logical(void *plt, int px, int py, float *lx, float *ly, float *ly2);
+EXPORT_C void plt_pan(void *plt, int dx, int dy);
+EXPORT_C void plt_zoom(void *plt, int cx, int cy, float factor);
+EXPORT_C void plt_pix2math(void *plt, int px, int py, float *x, float *y, float *y2);
 
-EXPORT_C void *plot_curve(void *obj, const float *x, const float *y, int count);
-EXPORT_C void append_points(void *line, const float *x, const float *y, int count);
-EXPORT_C int remove_curve(void *plt, void *line);
+EXPORT_C void *plt_curve(void *handle, const float *x, const float *y, int count);
+EXPORT_C void plt_append(void *crv, const float *x, const float *y, int count);
+EXPORT_C void plt_remove(void *plt, void *crv);
 
-EXPORT_C int show(void *plt, struct draw_command *out, int nout);
+EXPORT_C int plt_render(void *plt, struct plt_render_cmd *out, int nout);
 
 #endif // LIBPLOT_H
