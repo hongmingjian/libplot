@@ -13,28 +13,28 @@
 #endif
 
 struct plt_render_cmd {
-    int op;
-	unsigned int zIndex : 8;
-	unsigned int flags  : 24;
+    unsigned int op     : 8;
+    unsigned int zIndex : 8;
+    unsigned int flags  : 16;
     float x;
     float y;
-	float arg1;
-    char arg2[64];
+    float arg1;
+    float arg2;
+    char arg3[64];
 };
 enum {
     OP_NONE = 0,
 
-    OP_SET_TEXT_COLOR,
-    OP_SET_TEXT_FONT,
-    OP_DRAW_TEXT,
-    OP_SET_LINE_COLOR,
-    OP_SET_LINE_STYLE,
-    OP_SET_LINE_WIDTH,
-    OP_MOVETO,
-    OP_LINETO,
-    OP_DRAW_CIRCLE,
+    OP_SET_TEXT_COLOR, // arg3: color
+    OP_DRAW_TEXT,      // x, y: position, arg1: angle, arg2: alignment, arg3: text
+    OP_SET_LINE_COLOR, // arg3: color
+    OP_SET_LINE_STYLE, // arg3: style
+    OP_SET_LINE_WIDTH, // arg1: width
+    OP_MOVETO,         // x, y: position
+    OP_LINETO,         // x, y: position
+    OP_DRAW_ELLIPSE,   // x, y: center, arg1/2: length of semi-major/minor, arg3: fill color
 
-	OP_COUNT
+    OP_COUNT
 };
 
 enum {
@@ -50,6 +50,17 @@ enum {
 enum {
 	SCALE_LINEAR = 0,
 	SCALE_LOG = 1
+};
+
+enum {
+	ALIGN_LEFT = 0x00000000,
+	ALIGN_CENTER = 0x00000001,
+	ALIGN_RIGHT = 0x00000002,
+
+	ALIGN_TOP = 0x00000000,
+	ALIGN_VCENTER = 0x00010000,
+	ALIGN_BOTTOM = 0x00020000,
+	ALIGN_BASELINE = 0x00040000
 };
 
 EXPORT_C void *plt_create(int coord);

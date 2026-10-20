@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <regex>
+#include <cassert>
 
 #include "libplot.h"
 
@@ -39,22 +40,12 @@ static float NiceNumber(float x, bool round)
 }
 
 class Plot;
-
-enum MarkerType {
-    MARKER_NONE = 0,
-    MARKER_X,        // 'x'
-    MARKER_PLUS,     // '+'
-    MARKER_CIRCLE,   // 'o'
-    MARKER_SQUARE,   // 's'
-    MARKER_TRIANGLE, // '^'
-    MARKER_DIAMOND   // 'd'
-};
+class Curve;
 
 struct Tick {
     float interval = 0.0f; // 0 for auto ticks
     bool visible = true;
     std::string color = "#000000";
-    std::string font; // "Arial,12"
 };
 
 struct Grid {
@@ -66,7 +57,6 @@ struct Grid {
 struct Axis {
 	Plot *plot = nullptr;
 
-	//std::string name = "";
     std::string label = "";
 
     int scale = SCALE_LINEAR;
@@ -284,29 +274,6 @@ struct Axis {
 	}
 };
 
-struct Curve {
-	Plot *plot = nullptr;
-
-    std::string name = "";
-    std::string label = "";
-
-    std::vector<float> xData;
-    std::vector<float> yData;
-
-    std::string color = "#000000";
-    std::string style = "-";
-    float width = 1.5f;
-
-	MarkerType markerType = MARKER_NONE; // None for no marker
-	float markerSize = 6.0f; // in pixels
-	std::string markerColor = "#000000";
-	bool markerFilled = false;
-
-    int set_option(const std::string& opt, const std::string& val) {
-		return 0;
-	}
-};
-
 class Plot {
 private:
 	float width = 400.0f; //in pixels
@@ -328,6 +295,8 @@ public:
 	Axis axisX;   // as theta in Polar
 	Axis axisY;   // primary (left) Y, as r in Polar
 	Axis axisY2;  // secondary (right) Y
+	int activeY = AXIS_PRIMARY;
+	std::map<std::string, bool> autoscale = {{"X", true}, {"Y", true}, {"Y2", true}};
 
 	std::vector<Curve *> curves;
 
@@ -345,6 +314,7 @@ public:
 			axisX.scale = SCALE_LINEAR;
 			axisX.panEnabled = false;
 			axisX.zoomEnabled = false;
+			autoscale["X"] = false;
 
 			axisY2.visible = false;
 		}
@@ -555,11 +525,27 @@ public:
 					axis = &axisY;
 				else if (matches[1] == "Y2")
 					axis = &axisY2;
+				else
+					assert(false && "Must be X, Y or Y2");
 
 				if (axis) {
 					std::string suffix = matches[2];
 
-					if (suffix == "range") {
+					if (suffix == "active") {
+						if (coord == COORD_CARTESIAN) {
+							if (matches[1] == "Y")
+								activeY = AXIS_PRIMARY;
+							else if (matches[1] == "Y2")
+								activeY = AXIS_SECONDARY;
+						}
+					} else if (suffix == "autoscale") {
+						if (!(coord == COORD_POLAR && axis == &axisX)) {
+							if (value == "true")
+								autoscale[matches[1]] = true;
+							else if (value == "false")
+								autoscale[matches[1]] = false;
+						}
+					} else if (suffix == "range") {
 						if (!(coord == COORD_POLAR && axis == &axisX)) {
 							float a, b;
 							if (std::sscanf(value.c_str(), "%f , %f", &a, &b) == 2) {
@@ -629,8 +615,6 @@ public:
 						}
 					} else if (suffix == "tick.color") {
 						axis->tick.color = value;
-					} else if (suffix == "tick.font") {
-						axis->tick.font = value;
 					}
 				}
 			}
@@ -639,6 +623,80 @@ public:
 	}
 
 	int render(struct plt_render_cmd *out, size_t nout) const;
+};
+
+enum MarkerShape {
+    MARKER_NONE = 0,
+    MARKER_X,        // 'x'
+	MARKER_DOT,		 // '.'
+    MARKER_PLUS,     // '+'
+    MARKER_CIRCLE,   // 'o'
+    MARKER_SQUARE,   // 's'
+    MARKER_TRIANGLE, // '^'
+    MARKER_DIAMOND   // 'd'
+};
+
+struct Curve {
+	Plot *plot = nullptr;
+
+    std::string name = "";
+    std::string label = "";
+
+    std::vector<float> xData;
+    std::vector<float> yData;
+
+    std::string color = "#000000";
+    std::string style = "-";
+    float width = 1.5f;
+
+	int axis = AXIS_PRIMARY;
+
+	MarkerShape markerShape = MARKER_NONE; // None for no marker
+	float markerSize = 6.0f; // in pixels
+	std::string markerColor = "#000000";
+
+    Curve(Plot *plot) {
+		this->plot = plot;
+		axis = plot->activeY;
+	}
+    int set_option(const std::string& option, const std::string& value) {
+		if (option == "curve.color") {
+			color = value;
+		} else if (option == "curve.style") {
+			style = value;
+		} else if (option == "curve.width") {
+			float a;
+			if ((std::sscanf(value.c_str(), "%f", &a) == 1) && (a > 0)) {
+				width = a;
+			}
+		} else if (option == "curve.marker.shape") {
+			if (value == "")
+				markerShape = MARKER_NONE;
+			else if (value == "x")
+				markerShape = MARKER_X;
+			else if (value == ".")
+				markerShape = MARKER_DOT;
+			else if (value == "+")
+				markerShape = MARKER_PLUS;
+			else if (value == "o")
+				markerShape = MARKER_CIRCLE;
+			else if (value == "s")
+				markerShape = MARKER_SQUARE;
+			else if (value == "^")
+				markerShape = MARKER_TRIANGLE;
+			else if (value == "d")
+				markerShape = MARKER_DIAMOND;
+		} else if (option == "curve.marker.size") {
+			float a;
+			if ((std::sscanf(value.c_str(), "%f", &a) == 1) && (a > 0)) {
+				markerSize = a;
+			}
+		} else if (option == "curve.marker.color") {
+			markerColor = value;
+		}
+
+		return 0;
+	}
 };
 
 #endif // LIBPLOT_HPP

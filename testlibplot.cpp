@@ -10,12 +10,13 @@
 #include <cstdio>
 #include <iostream>
 #include <sstream>
+#include <random>
 
 #include "libplot.h"
 
-typedef void* (*FuncCreate)(int);
+typedef void *(*FuncCreate)(int);
 typedef void  (*FuncDestroy)(void*);
-//typedef int   (*FuncAddCurve)(void*, const float*, const float*, int);
+typedef void *(*FuncCurve)(void*, const float*, const float*, int);
 typedef int   (*FuncSetOption)(void*, const char*, const char*);
 typedef void  (*FuncPan)(void*, int, int);
 typedef void  (*FuncZoom)(void*, int, int, float);
@@ -25,7 +26,7 @@ typedef int   (*FuncRender)(void*, struct plt_render_cmd *, int);
 HMODULE            hPlotDll         = nullptr;
 FuncCreate pfnCreate = nullptr;
 FuncDestroy pfnDestroy = nullptr;
-//FuncPlot           pfnPlot          = nullptr;
+FuncCurve           pfnCurve          = nullptr;
 FuncSetOption      pfnSetOption     = nullptr;
 FuncPan            pfnPan           = nullptr;
 FuncZoom           pfnZoom          = nullptr;
@@ -35,8 +36,11 @@ FuncRender           pfnRender          = nullptr;
 int g_canvasWidth  = 550;
 int g_canvasHeight = 450;
 void *g_plt = nullptr;
-static bool g_isPanning = false;  // 是否正在拖动
-static POINT g_lastMousePos;       // 记录上一次鼠标的像素坐标
+std::vector<void *> g_curves;
+int g_coord = COORD_POLAR;//CARTESIAN;
+int g_idTimer = 1001;
+static bool g_isPanning = false;
+static POINT g_lastMousePos;
 
 COLORREF convertColor(const char* str) {
     if (!str || strlen(str) == 0)
@@ -69,6 +73,7 @@ int convertLineStyle(const char* styleStr) {
     if (s == "--" || s == "dash")     return PS_DASH;
     if (s == ":" || s == "dot")       return PS_DOT;
     if (s == "-." || s == "dashdot")   return PS_DASHDOT;
+    if (s == "-.." || s == "dashdotdot")   return PS_DASHDOTDOT;
     return PS_SOLID;
 }
 
@@ -79,91 +84,67 @@ HPEN CreateGDIRenderPen(int style, int width, COLORREF color) {
     return ExtCreatePen(PS_GEOMETRIC | style, width, &lb, 0, NULL);
 }
 
-HFONT CreateGDIRenderFont(HDC hdc, const std::string& fontStr) {
-    std::string fontName = "Arial";
-    int pointSize = 12;
-
-    std::stringstream ss(fontStr);
-    std::string nameToken, sizeToken;
-
-    if (std::getline(ss, nameToken, ',')) {
-        if (!nameToken.empty())
-			fontName = nameToken;
-    }
-    if (std::getline(ss, sizeToken)) {
-        if (!sizeToken.empty())
-			pointSize = std::stoi(sizeToken);
-    }
-
-    HFONT hFont = CreateFontA(
-		-MulDiv(pointSize, GetDeviceCaps(hdc, LOGPIXELSY), 72),
-        0,
-        0,
-        0,
-        FW_NORMAL,
-        FALSE,
-        FALSE,
-        FALSE,
-        DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS,
-        CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY,
-        DEFAULT_PITCH | FF_DONTCARE,
-        fontName.c_str()
-    );
-
-    return hFont;
-}
-
 void ExecuteDrawCommands(HDC hdc, std::vector<struct plt_render_cmd>& cmds) {
     std::stable_sort(cmds.begin(), cmds.end(), [](const struct plt_render_cmd& a, const struct plt_render_cmd& b) {
         return a.zIndex < b.zIndex;
     });
 
-    COLORREF curColor = RGB(0, 0, 0);
-    int curLineStyle = PS_SOLID;
-    int curLineWidth = 1;
+    COLORREF oldTextColor = GetTextColor(hdc);
+	COLORREF curLineColor;
+    int curLineStyle;
+    int curLineWidth;
 
-    HPEN hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
-    HPEN hOldPen = (HPEN)SelectObject(hdc, hCurPen);
-    HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
-    HFONT hCurFont = NULL;
-    HFONT hOldFont = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
+	{
+		LOGPEN lp = { 0 };
+		GetObjectA(GetCurrentObject(hdc, OBJ_PEN), sizeof(LOGPEN), &lp);
+		curLineColor = lp.lopnColor;
+		curLineStyle = lp.lopnStyle;
+		curLineWidth = lp.lopnWidth.x ? lp.lopnWidth.x : 1;
+	}
+    HPEN hCurPen = NULL;
+    HPEN hOldPen = NULL;
 
-    for (const auto& cmd : cmds) {
+    for (auto& cmd : cmds) {
         switch (cmd.op) {
         case OP_SET_TEXT_COLOR:
-            SetTextColor(hdc, convertColor(cmd.arg2));
-            break;
-        case OP_SET_TEXT_FONT:
-            if (hCurFont) {
-				SelectObject(hdc, hOldFont);
-				DeleteObject(hCurFont);
-			}
-			hCurFont = CreateGDIRenderFont(hdc, cmd.arg2);
-            hOldFont = (HFONT)SelectObject(hdc, hCurFont);
+            SetTextColor(hdc, convertColor(cmd.arg3));
             break;
         case OP_DRAW_TEXT: {
-		    HFONT hCurrentFont = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
-
 		    LOGFONTA lf = { 0 };
-		    GetObjectA(hCurrentFont, sizeof(LOGFONTA), &lf);
+		    GetObjectA(GetCurrentObject(hdc, OBJ_FONT), sizeof(LOGFONTA), &lf);
 
 		    long gdiAngle = static_cast<long>(10 * cmd.arg1 * 180 / M_PI);
 		    lf.lfEscapement = gdiAngle;
 		    lf.lfOrientation = gdiAngle;
 
-		    HFONT hRotatedFont = CreateFontIndirectA(&lf);
-
-		    if (hRotatedFont != NULL) {
-				HFONT hOldFont = (HFONT)SelectObject(hdc, hRotatedFont);
+		    HFONT hCurFont = CreateFontIndirectA(&lf);
+		    if (hCurFont) {
+				HFONT hOldFont = (HFONT)SelectObject(hdc, hCurFont);
 				int oldBkMode = SetBkMode(hdc, TRANSPARENT);
 
-				TextOutA(hdc, cmd.x, cmd.y, cmd.arg2, strlen(cmd.arg2));
+				unsigned int pltAlign = static_cast<unsigned int>(cmd.arg2);
+				UINT gdiAlign = TA_LEFT | TA_TOP;
+				if (pltAlign & ALIGN_CENTER)
+					gdiAlign = (gdiAlign & ~TA_LEFT) | TA_CENTER;
+				else if (pltAlign & ALIGN_RIGHT)
+					gdiAlign = (gdiAlign & ~TA_LEFT) | TA_RIGHT;
+                if (pltAlign & ALIGN_BASELINE)
+					gdiAlign = (gdiAlign & ~TA_TOP) | TA_BASELINE;
+                else if (pltAlign & ALIGN_BOTTOM)
+				 	gdiAlign = (gdiAlign & ~TA_TOP) | TA_BOTTOM;
+                else if (pltAlign & ALIGN_VCENTER) {
+					SIZE sz;
+					GetTextExtentPoint32A(hdc, cmd.arg3, strlen(cmd.arg3), &sz);
+					cmd.y -= sz.cy / 2;
+                    gdiAlign = (gdiAlign & ~TA_TOP) | TA_TOP;
+				}
+				SetTextAlign(hdc, gdiAlign);
+
+				TextOutA(hdc, cmd.x, cmd.y, cmd.arg3, strlen(cmd.arg3));
 
 				SetBkMode(hdc, oldBkMode);
 				SelectObject(hdc, hOldFont);
-				DeleteObject(hRotatedFont);
+				DeleteObject(hCurFont);
 			}
             break;
         }
@@ -171,17 +152,19 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct plt_render_cmd>& cmds) {
         case OP_SET_LINE_STYLE:
         case OP_SET_LINE_WIDTH:
 			if (cmd.op == OP_SET_LINE_COLOR)
-				curColor = convertColor(cmd.arg2);
+				curLineColor = convertColor(cmd.arg3);
 			else if (cmd.op == OP_SET_LINE_STYLE)
-				curLineStyle = convertLineStyle(cmd.arg2);
+				curLineStyle = convertLineStyle(cmd.arg3);
 			else if (cmd.op == OP_SET_LINE_WIDTH) {
 				curLineWidth = (int)cmd.arg1;
 				if (curLineWidth < 1)
 					curLineWidth = 1;
 			}
-            SelectObject(hdc, hOldPen);
-			DeleteObject(hCurPen);
-            hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curColor);
+			if (hOldPen)
+				SelectObject(hdc, hOldPen);
+			if (hCurPen)
+				DeleteObject(hCurPen);
+            hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curLineColor);
             hOldPen = (HPEN)SelectObject(hdc, hCurPen);
             break;
         case OP_MOVETO:
@@ -190,25 +173,41 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct plt_render_cmd>& cmds) {
         case OP_LINETO:
 			LineTo(hdc, (int)cmd.x, (int)cmd.y);
 			break;
-        case OP_DRAW_CIRCLE:
-			Ellipse(hdc, (int)(cmd.x - cmd.arg1), (int)(cmd.y - cmd.arg1), (int)(cmd.x + cmd.arg1), (int)(cmd.y + cmd.arg1));
-			break;
+        case OP_DRAW_ELLIPSE: {
+			HBRUSH hCurBrush = NULL;
+			HBRUSH hOldBrush = NULL;
+			if (std::string(cmd.arg3) == "") {
+				hOldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+			} else {
+				hCurBrush = CreateSolidBrush(convertColor(cmd.arg3));
+				hOldBrush = (HBRUSH)SelectObject(hdc, hCurBrush);
+			}
+
+            Ellipse(hdc, (int)(cmd.x - cmd.arg1), (int)(cmd.y - cmd.arg2),
+					     (int)(cmd.x + cmd.arg1), (int)(cmd.y + cmd.arg2));
+
+			if (hOldBrush)
+				SelectObject(hdc, hOldBrush);
+			if (hCurBrush)
+				DeleteObject(hCurBrush);
+            break;
+            }
         }
     }
-    SelectObject(hdc, hOldPen);
-	DeleteObject(hCurPen);
-	SelectObject(hdc, hOldBrush);
-    if (hCurFont) {
-		SelectObject(hdc, hOldFont);
-		DeleteObject(hCurFont);
-	}
+	if (hOldPen)
+		SelectObject(hdc, hOldPen);
+	if (hCurPen)
+		DeleteObject(hCurPen);
+	SetTextColor(hdc, oldTextColor);
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
-    case WM_CREATE:
+    case WM_CREATE: {
+		SetTimer(hWnd, g_idTimer, 1000, NULL);
+
         if (pfnCreate)
-			g_plt = pfnCreate(COORD_CARTESIAN);
+			g_plt = pfnCreate(g_coord);
 
 		if (g_plt && pfnSetOption) {
 //			pfnSetOption(g_plt, "plot.axisX.tick.visible", "true");
@@ -217,12 +216,61 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 //			pfnSetOption(g_plt, "plot.axisY.color", "#0000FF");
 //			pfnSetOption(g_plt, "plot.axisY.tick.color", "#0000FF");
 //			pfnSetOption(g_plt, "plot.axisY.grid.color", "#0000FF");
-			pfnSetOption(g_plt, "plot.axisY.range", "1,1e2");
-			pfnSetOption(g_plt, "plot.axisY.scale", "linear");
+//			pfnSetOption(g_plt, "plot.axisY.range", "1,1e2");
+//			pfnSetOption(g_plt, "plot.axisY.scale", "linear");
+		}
+
+		void *curve = pfnCurve(g_plt, nullptr, nullptr, 0);
+		if (curve) {
+			g_curves.push_back(curve);
+
+			pfnSetOption(curve, "curve.color", "#0000FF");
+			pfnSetOption(curve, "curve.width", "2");
+//			pfnSetOption(curve, "curve.style", ":");
+//			pfnSetOption(curve, "curve.marker.shape", ".");
+//			pfnSetOption(curve, "curve.marker.size", "8");
+//			pfnSetOption(curve, "curve.marker.color", "#FF0000");
 		}
 
 		break;
+	}
 
+    case WM_TIMER: {
+		if (wParam == g_idTimer) {
+			if (g_plt && pfnCurve && pfnSetOption) {
+				std::vector<float> xData;
+				std::vector<float> yData;
+
+				std::random_device rd;
+				std::mt19937 gen(rd());
+
+				float a = 0, b = 1;
+				std::uniform_int_distribution<int> distrib(2, 5);
+				int loops = distrib(gen);
+				int npoints_per_loop = 72;
+				int npoints = loops * npoints_per_loop;
+				float step = 2.0f * M_PI / npoints_per_loop;
+				for (int i = 0; i < npoints+1; ++i) {
+					float theta = i * step;
+					float r = a + b * theta;
+					if (g_coord == COORD_CARTESIAN) {
+						xData.push_back(r * std::cos(theta));
+						yData.push_back(r * std::sin(theta));
+					} else {
+						xData.push_back(std::fmod(theta, 2.0f * M_PI));
+						yData.push_back(r);
+					}
+				}
+
+				pfnCurve(g_curves[0], xData.data(), yData.data(), xData.size());
+
+                InvalidateRect(hWnd, NULL, FALSE);
+
+				KillTimer(hWnd, g_idTimer);
+			}
+		}
+		return 0;
+	}
     case WM_LBUTTONDOWN: {
         g_isPanning = true;
         g_lastMousePos.x = LOWORD(lParam);
@@ -282,32 +330,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_MOUSEWHEEL: {
         if (g_plt && pfnZoom) {
-            // A. 获取滚轮滚动的距离
-            // GET_WHEEL_DELTA_WPARAM 获取的值通常是 120 (向上滚) 或 -120 (向下滚)
             short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
 
-            // B. 获取滚轮触发时鼠标的 屏幕绝对坐标
 			int screenX = (int)(short)LOWORD(lParam);
 			int screenY = (int)(short)HIWORD(lParam);
 
-            // C. 关键步骤：将屏幕绝对坐标转换为当前窗口画布的 相对像素坐标
             POINT ptMouse = { screenX, screenY };
-            ScreenToClient(hWnd, &ptMouse); // 转换后，ptMouse.x 和 ptMouse.y 就是相对于画布左上角的像素位置
+            ScreenToClient(hWnd, &ptMouse);
 
 			int clicks = zDelta / WHEEL_DELTA;
             float factor = 1.0f;
             if (clicks > 0) {
-                // 向上滚：按 0.8 的步长放大（每次放大 20%）
-                // 如果你想让幅度小一点，可以用标准对数：factor = std::pow(0.8f, clicks);
                 factor = 0.8f;
             } else if (clicks < 0) {
-                // 向下滚：完美无误差的 1.25 缩小！
-                // 1 / 0.8f 刚好等于 1.25f，无论是 float 还是 double 都极其精准
                 factor = 1.25f;
             }
 
             if (factor != 1.0f) {
-//				printf("factor=%f\n", factor);
 				fflush(stdout);
                 pfnZoom(g_plt, ptMouse.x, ptMouse.y, factor);
                 InvalidateRect(hWnd, NULL, FALSE);
@@ -390,7 +429,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     if (hPlotDll) {
         pfnCreate = (FuncCreate)GetProcAddress(hPlotDll, "plt_create");
         pfnDestroy = (FuncDestroy)GetProcAddress(hPlotDll, "plt_destroy");
-//        pfnPlot          = (FuncPlot)GetProcAddress(hPlotDll, "plot");
+        pfnCurve          = (FuncCurve)GetProcAddress(hPlotDll, "plt_curve");
         pfnSetOption     = (FuncSetOption)GetProcAddress(hPlotDll, "plt_set_option");
 		pfnPan           = (FuncPan)GetProcAddress(hPlotDll, "plt_pan");
 		pfnZoom          = (FuncZoom)GetProcAddress(hPlotDll, "plt_zoom");
