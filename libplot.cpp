@@ -235,9 +235,9 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 
 			if (axisX.tick.visible) {
 				cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.tick.color));
-				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, outer_edge.first, outer_edge.second,
-							0,//theta + (theta>=M_PI?M_PI_2:-M_PI_2),  //TODO
-							ALIGN_CENTER | (theta>=M_PI?ALIGN_TOP:ALIGN_BASELINE),
+				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, outer_edge.first, outer_edge.second, 0,
+							((abs(theta-M_PI_2)<std::numeric_limits<float>::epsilon()||abs(theta-3*M_PI_2)<std::numeric_limits<float>::epsilon())?ALIGN_CENTER:((theta>M_PI_2&&theta<3*M_PI_2)?ALIGN_RIGHT:ALIGN_LEFT)) |
+							((abs(theta)<std::numeric_limits<float>::epsilon()||abs(theta-M_PI)<std::numeric_limits<float>::epsilon())?ALIGN_VCENTER:((theta>M_PI)?ALIGN_TOP:ALIGN_BOTTOM)),
 							FormatNumber(180 * theta / M_PI, SCALE_LINEAR)));
 			}
 		}
