@@ -69,6 +69,7 @@ COLORREF convertColor(const char* str) {
 
 int convertLineStyle(const char* styleStr) {
     std::string s(styleStr);
+	if (s == "")                      return PS_NULL;
     if (s == "-" || s == "solid")     return PS_SOLID;
     if (s == "--" || s == "dash")     return PS_DASH;
     if (s == ":" || s == "dot")       return PS_DOT;
