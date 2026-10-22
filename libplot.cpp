@@ -220,21 +220,22 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 	if (coord == COORD_POLAR) {
 		auto [cx, cy] = ToPolarPixel(0.0, 0.0);
 
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 10, 0, 0.0f, 0.0f, 1.0f, 0.0f, ""));
+
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.color));
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.style));
+		cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.tick.color));
 		for (float theta : axisX.calculateTicks()) {
 			if (theta <= axisX.min)
 				continue;
 			std::pair<float, float> outer_edge = ToPolarPixel(theta, axisY.max);
 
 			if (axisX.grid.visible) {
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.color));
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.style));
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 10, 0, 0.0f, 0.0f, 1.0f, 0.0f, ""));
 				cmds.push_back(plt_render_cmd_(OP_MOVETO, 10, 0, cx, cy, 0.0f, 0.0f, ""));
 				cmds.push_back(plt_render_cmd_(OP_LINETO, 10, 0, outer_edge.first, outer_edge.second, 0.0f, 0.0f, ""));
 			}
 
 			if (axisX.tick.visible) {
-				cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.tick.color));
 				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, outer_edge.first, outer_edge.second, 0,
 							((abs(theta-M_PI_2)<std::numeric_limits<float>::epsilon()||abs(theta-3*M_PI_2)<std::numeric_limits<float>::epsilon())?ALIGN_CENTER:((theta>M_PI_2&&theta<3*M_PI_2)?ALIGN_RIGHT:ALIGN_LEFT)) |
 							((abs(theta)<std::numeric_limits<float>::epsilon()||abs(theta-M_PI)<std::numeric_limits<float>::epsilon())?ALIGN_VCENTER:((theta>M_PI)?ALIGN_TOP:ALIGN_BOTTOM)),
@@ -242,6 +243,9 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 			}
 		}
 
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.color));
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.style));
+		cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.tick.color));
 		for (float r : axisY.calculateTicks()) {
 			if (r <= axisY.min)
 				continue;
@@ -249,13 +253,9 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 			float pixelR = std::abs(edge.first - cx);
 			if (pixelR > 0) {
 				if (axisY.grid.visible) {
-					cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.color));
-					cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.style));
-					cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 10, 0, 0.0f, 0.0f, 1.0f, 0.0f, ""));
 					cmds.push_back(plt_render_cmd_(OP_DRAW_ELLIPSE, 10, 0, cx, cy, pixelR, pixelR, ""));
 				}
 				if (axisY.tick.visible) {
-					cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.tick.color));
 					cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, edge.first, edge.second, 0.0f, ALIGN_CENTER | ALIGN_TOP, FormatNumber(r, SCALE_LINEAR)));
 				}
 			}
@@ -265,17 +265,17 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 		if (axisX.visible) {
 			float max_pixel_r = std::abs(max_edge.first - cx);
 			if (max_pixel_r > 0) {
+				cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 50, 0, 0.0f, 0.0f, axisX.width, 0.0f, ""));
 				cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.color));
 				cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.style));
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 50, 0, 0.0f, 0.0f, axisX.width, 0.0f, ""));
 				cmds.push_back(plt_render_cmd_(OP_DRAW_ELLIPSE, 50, 0, cx, cy, max_pixel_r, max_pixel_r, ""));
 			}
 		}
 
 		if (axisY.visible) {
+			cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 50, 0, 0.0f, 0.0f, axisY.width, 0.0f, ""));
 			cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.color));
 			cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.style));
-			cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 50, 0, 0.0f, 0.0f, axisY.width, 0.0f, ""));
 
 			std::pair<float, float> max_edge2;
 
@@ -297,36 +297,36 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 		float pyMin = ToPixelY(axisY.max);//!
 		float pyMax = ToPixelY(axisY.min);//!
 
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 10, 0, 0.0f, 0.0f, 1.0f, 0.0f, ""));
+
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.color));
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.style));
+		cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.tick.color));
 		for (float x : axisX.calculateTicks()) {
 			float px = ToPixelX(x);
 
 			if (axisX.grid.visible) {
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.color));
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.style));
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 10, 0, 0.0f, 0.0f, 1.0f, 0.0f, ""));
 				cmds.push_back(plt_render_cmd_(OP_MOVETO, 10, 0, px, pyMin, 0.0f, 0.0f, ""));
 				cmds.push_back(plt_render_cmd_(OP_LINETO, 10, 0, px, pyMax, 0.0f, 0.0f, ""));
 			}
 
 			if (axisX.tick.visible) {
-				cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.tick.color));
 				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, px, pyMax, 0.0f, ALIGN_CENTER | ALIGN_TOP, FormatNumber(x, axisX.scale)));
 			}
 		}
 
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.color));
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.style));
+		cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.tick.color));
 		for (float y : axisY.calculateTicks()) {
 			float py = ToPixelY(y);
 
 			if (axisY.grid.visible || (axisY2.visible && axisY2.grid.visible)) {
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.color));
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.style));
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 10, 0, 0.0f, 0.0f, 1.0f, 0.0f, ""));
 				cmds.push_back(plt_render_cmd_(OP_MOVETO, 10, 0, pxMin, py, 0.0f, 0.0f, ""));
 				cmds.push_back(plt_render_cmd_(OP_LINETO, 10, 0, pxMax, py, 0.0f, 0.0f, ""));
 			}
 
 			if (axisY.tick.visible) {
-				cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.tick.color));
 				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, pxMin, py, 0.0f, ALIGN_RIGHT | ALIGN_VCENTER, FormatNumber(y, axisY.scale)));
 			}
 		}
@@ -371,12 +371,13 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 		if (!curve || curve->xData.empty() || curve->yData.empty())
 			continue;
 
+		std::vector<std::pair<float, float>> pxpy;
+
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 20, 0, 0.0f, 0.0f, curve->width, 0.0f, ""));
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 20, 0, 0.0f, 0.0f, 0.0f, 0.0f, curve->color));
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 20, 0, 0.0f, 0.0f, 0.0f, 0.0f, curve->style));
-		cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 20, 0, 0.0f, 0.0f, curve->width, 0.0f, ""));
 
 		bool firstPoint = true;
-
 		for (size_t i = 0; i < std::min(curve->xData.size(), curve->yData.size()); ++i) {
 			if (curve->xData[i] < axisX.min || curve->xData[i] > axisX.max) {
 				firstPoint = true;
@@ -400,18 +401,22 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 				py = p.second;
 			}
 
+			if (curve->markerShape != MARKER_NONE)
+				pxpy.push_back({px, py});
+
 			if (firstPoint) {
 				cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, 0, px, py, 0.0f, 0.0f, ""));
 				firstPoint = false;
 			} else {
 				cmds.push_back(plt_render_cmd_(OP_LINETO, 20, 0, px, py, 0.0f, 0.0f, ""));
 			}
+		}
 
-			if (curve->markerShape != MARKER_NONE) {
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 30, 0, 0.0f, 0.0f, 0.0f, 0.0f, curve->markerColor));
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 30, 0, 0.0f, 0.0f, 0.0f, 0.0f, "-"));
-
-				float h = curve->markerSize / 2.0f;
+		if (!pxpy.empty()) {
+			float h = curve->markerSize / 2.0f;
+			cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 30, 0, 0.0f, 0.0f, 0.0f, 0.0f, curve->markerColor));
+			cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 30, 0, 0.0f, 0.0f, 0.0f, 0.0f, "-"));
+			for (auto [px, py] : pxpy) {
 				if (curve->markerShape == MARKER_X) {
 					cmds.push_back(plt_render_cmd_(OP_MOVETO, 30, 0, px - h, py - h, 0.0f, 0.0f, ""));
 					cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px + h, py + h, 0.0f, 0.0f, ""));
@@ -444,9 +449,6 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 					cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px - h, py, 0.0f, 0.0f, ""));
 					cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px, py - h, 0.0f, 0.0f, ""));
 				}
-
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 30, 0, 0.0f, 0.0f, 0.0f, 0.0f, curve->color));
-				cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 30, 0, 0.0f, 0.0f, 0.0f, 0.0f, curve->style));
 			}
 		}
 	}
