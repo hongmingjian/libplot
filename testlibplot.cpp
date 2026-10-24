@@ -125,7 +125,7 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct plt_render_cmd>& cmds) {
 
 				unsigned int pltAlign = static_cast<unsigned int>(cmd.arg2);
 				UINT gdiAlign = TA_LEFT | TA_TOP;
-				if (pltAlign & ALIGN_CENTER)
+				if (pltAlign & ALIGN_HCENTER)
 					gdiAlign = (gdiAlign & ~TA_LEFT) | TA_CENTER;
 				else if (pltAlign & ALIGN_RIGHT)
 					gdiAlign = (gdiAlign & ~TA_LEFT) | TA_RIGHT;
@@ -221,18 +221,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 //			pfnSetOption(g_plt, "plot.axisY.scale", "linear");
 		}
 
-		void *curve = pfnCurve(g_plt, nullptr, nullptr, 0);
-		if (curve) {
-			g_curves.push_back(curve);
-
-			pfnSetOption(curve, "curve.color", "#0000FF");
-			pfnSetOption(curve, "curve.width", "2");
-//			pfnSetOption(curve, "curve.style", ":");
-//			pfnSetOption(curve, "curve.marker.shape", ".");
-//			pfnSetOption(curve, "curve.marker.size", "8");
-//			pfnSetOption(curve, "curve.marker.color", "#FF0000");
-		}
-
 		break;
 	}
 
@@ -246,11 +234,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 				std::mt19937 gen(rd());
 
 				float a = 0, b = 1;
-				std::uniform_int_distribution<int> distrib(2, 5);
-				int loops = distrib(gen);
-				int npoints_per_loop = 72;
-				int npoints = loops * npoints_per_loop;
-				float step = 2.0f * M_PI / npoints_per_loop;
+				std::uniform_int_distribution<int> distrib(3, 6);
+				int nturns = distrib(gen);
+				int npoints_per_turn = 72;
+				int npoints = nturns * npoints_per_turn;
+				float step = 2.0f * M_PI / npoints_per_turn;
 				for (int i = 0; i < npoints+1; ++i) {
 					float theta = i * step;
 					float r = a + b * theta;
@@ -263,7 +251,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 					}
 				}
 
-				pfnCurve(g_curves[0], xData.data(), yData.data(), xData.size());
+				if (g_curves.empty()) {
+					void *curve = pfnCurve(g_plt, xData.data(), yData.data(), xData.size());
+					if (curve) {
+						g_curves.push_back(curve);
+						pfnSetOption(curve, "curve.color", "#0000FF");
+						pfnSetOption(curve, "curve.width", "2");
+//					    pfnSetOption(curve, "curve.style", ":");
+//					    pfnSetOption(curve, "curve.marker.shape", ".");
+//					    pfnSetOption(curve, "curve.marker.size", "8");
+//						pfnSetOption(curve, "curve.marker.color", "#FF0000");
+					}
+				} else
+					pfnCurve(g_curves[0], xData.data(), yData.data(), xData.size());
 
                 InvalidateRect(hWnd, NULL, FALSE);
 
@@ -310,11 +310,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
 #ifdef UNICODE
             wchar_t szTitle[256];
-            swprintf_s(szTitle, L"Test libplot | X: %.4f(px: %d), Y: %.4f(py: %d), Y2: %.4f", logicalX, curX, logicalY, curY, logicalY2);
+            swprintf_s(szTitle, L"Libplot demo: (%d, %d) -> (%.g, %g, %g)", curX, curY, logicalX, logicalY, logicalY2);
             SetWindowTextW(hWnd, szTitle);
 #else
             char szTitle[256];
-            sprintf_s(szTitle, "Test libplot | X: %.4f(px: %d), Y: %.4f(py: %d), Y2: %.4f", logicalX, curX, logicalY, curY, logicalY2);
+            sprintf_s(szTitle, "Libplot demo: (%d, %d) -> (%g, %g, %g)", curX, curY, logicalX, logicalY, logicalY2);
             SetWindowTextA(hWnd, szTitle);
 #endif
         }
@@ -331,27 +331,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_MOUSEWHEEL: {
         if (g_plt && pfnZoom) {
-            short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+			if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
+				short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
 
-			int screenX = (int)(short)LOWORD(lParam);
-			int screenY = (int)(short)HIWORD(lParam);
+				int screenX = (int)(short)LOWORD(lParam);
+				int screenY = (int)(short)HIWORD(lParam);
 
-            POINT ptMouse = { screenX, screenY };
-            ScreenToClient(hWnd, &ptMouse);
+				POINT ptMouse = { screenX, screenY };
+				ScreenToClient(hWnd, &ptMouse);
 
-			int clicks = zDelta / WHEEL_DELTA;
-            float factor = 1.0f;
-            if (clicks > 0) {
-                factor = 0.8f;
-            } else if (clicks < 0) {
-                factor = 1.25f;
-            }
+				int clicks = zDelta / WHEEL_DELTA;
+				float factor = 1.0f;
+				if (clicks > 0) {
+					factor = 1.25f;
+				} else if (clicks < 0) {
+					factor = 0.8f;
+				}
 
-            if (factor != 1.0f) {
-				fflush(stdout);
-                pfnZoom(g_plt, ptMouse.x, ptMouse.y, factor);
-                InvalidateRect(hWnd, NULL, FALSE);
-            }
+				if (factor != 1.0f) {
+					pfnZoom(g_plt, ptMouse.x, ptMouse.y, factor);
+					InvalidateRect(hWnd, NULL, FALSE);
+				}
+			}
         }
         return 0;
     }
@@ -450,7 +451,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     if (!RegisterClassExW(&wcex)) return 0;
 
-    HWND hWnd = CreateWindowW(szClassName, L"Test libplot", WS_OVERLAPPEDWINDOW,
+    HWND hWnd = CreateWindowW(szClassName, L"Libplot demo", WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, g_canvasWidth, g_canvasHeight, NULL, NULL, hInstance, NULL);
 
     if (!hWnd) return 0;

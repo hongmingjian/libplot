@@ -237,7 +237,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 
 			if (axisX.tick.visible) {
 				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, outer_edge.first, outer_edge.second, 0,
-							((abs(theta-M_PI_2)<std::numeric_limits<float>::epsilon()||abs(theta-3*M_PI_2)<std::numeric_limits<float>::epsilon())?ALIGN_CENTER:((theta>M_PI_2&&theta<3*M_PI_2)?ALIGN_RIGHT:ALIGN_LEFT)) |
+							((abs(theta-M_PI_2)<std::numeric_limits<float>::epsilon()||abs(theta-3*M_PI_2)<std::numeric_limits<float>::epsilon())?ALIGN_HCENTER:((theta>M_PI_2&&theta<3*M_PI_2)?ALIGN_RIGHT:ALIGN_LEFT)) |
 							((abs(theta)<std::numeric_limits<float>::epsilon()||abs(theta-M_PI)<std::numeric_limits<float>::epsilon())?ALIGN_VCENTER:((theta>M_PI)?ALIGN_TOP:ALIGN_BOTTOM)),
 							FormatNumber(180 * theta / M_PI, SCALE_LINEAR)));
 			}
@@ -256,7 +256,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 					cmds.push_back(plt_render_cmd_(OP_DRAW_ELLIPSE, 10, 0, cx, cy, pixelR, pixelR, ""));
 				}
 				if (axisY.tick.visible) {
-					cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, edge.first, edge.second, 0.0f, ALIGN_CENTER | ALIGN_TOP, FormatNumber(r, SCALE_LINEAR)));
+					cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, edge.first, edge.second, 0.0f, ALIGN_HCENTER | ALIGN_TOP, FormatNumber(r, SCALE_LINEAR)));
 				}
 			}
 		}
@@ -311,7 +311,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 			}
 
 			if (axisX.tick.visible) {
-				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, px, pyMax, 0.0f, ALIGN_CENTER | ALIGN_TOP, FormatNumber(x, axisX.scale)));
+				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, px, pyMax, 0.0f, ALIGN_HCENTER | ALIGN_TOP, FormatNumber(x, axisX.scale)));
 			}
 		}
 
