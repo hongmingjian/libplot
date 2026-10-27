@@ -215,6 +215,9 @@ inline struct plt_render_cmd plt_render_cmd_(
 
 int Plot::render(struct plt_render_cmd *out, size_t nout) const
 {
+	if (!visible)
+		return 0;
+
 	std::vector<struct plt_render_cmd> cmds;
 
 	if (coord == COORD_POLAR) {

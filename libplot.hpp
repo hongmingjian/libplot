@@ -276,6 +276,7 @@ struct Axis {
 
 class Plot {
 private:
+	bool visible = true;
 	float width = 400.0f; //in pixels
 	float height = 300.0f; //ditto
 	std::map<std::string, float> paddings = {{"L", 60}, {"T", 40}, {"R", 60}, {"B", 40}}; //ditto
@@ -515,6 +516,11 @@ public:
 				height = h;
 				return 0;
 			}
+		} else if (option == "plot.visible") {
+			if (value == "true")
+				visible = true;
+			else if (value == "false")
+				visible = false;
 		} else if (std::regex_match(option, std::regex(R"(^plot\.axis(X|Y|Y2)\..+$)"))) {
 			Axis *axis = nullptr;
 			std::smatch matches;
