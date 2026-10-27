@@ -15,6 +15,7 @@
            #:execute-render-cmds
            #:+coord-cartesian+
            #:+coord-polar+
+           #:plt-render-cmd
            #:demo
            ))
 (in-package :libplot)
@@ -410,7 +411,9 @@
                    (unless (fli:null-pointer-p crv)
                      (plt-set-option crv "curve.color" "#0000FF")
                      (plt-set-option crv "curve.width" "2")
-                     (push crv crvs))))
+                     (push crv crvs)
+                     (setf (window-plt-curves interface) crvs)
+                     )))
 
              (gp:invalidate-rectangle pane))))
 
