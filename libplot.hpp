@@ -645,6 +645,7 @@ struct Curve {
     std::vector<float> xData;
     std::vector<float> yData;
 
+	bool visible = true;
     std::string color = "#000000";
     std::string style = "-";
     float width = 1.5f;
@@ -660,7 +661,12 @@ struct Curve {
 		axis = plot->activeY;
 	}
     int set_option(const std::string& option, const std::string& value) {
-		if (option == "curve.color") {
+		if (option == "curve.visible") {
+			if (value == "true")
+				visible = true;
+			else if (value == "false")
+				visible = false;
+		} else if (option == "curve.color") {
 			color = value;
 		} else if (option == "curve.style") {
 			style = value;

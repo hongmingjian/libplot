@@ -370,6 +370,8 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 	for (const auto* curve : curves) {
 		if (!curve || curve->xData.empty() || curve->yData.empty())
 			continue;
+		if (!curve->visible)
+			continue;
 
 		std::vector<std::pair<float, float>> pxpy;
 
