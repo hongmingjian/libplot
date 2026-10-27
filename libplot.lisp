@@ -181,6 +181,18 @@
       nil
       )))
 
+(defun parse-style (style)
+  (when (stringp style)
+    (let ((s (string-trim " \t\r\n" style)))
+      (cond
+        ((string= s "-") '(1)) ; solid
+        ((string= s "--") '(6 4)) ; dash
+        ((string= s ":") '(2 2)) ; dot
+        ((string= s "-.") '(6 3 2 3)) ; dashdot
+        ((string= s "-..") '(6 3 2 3 2 3)) ;dashdotdot
+        (t nil) ; = PS_NULL in GDI
+        ))))
+
 (defun draw-string (pane string x y &key (h-align :left) (v-align :top))
   "h-align: :left, :center, :right
    v-align: :baseline, :top, :center, :bottom"
@@ -236,6 +248,10 @@
          (unless (null color)
            (setf (getf draw-state :line-color) color))))
 
+      (#.+op-set-line-style+
+       (let ((style (parse-style arg3)))
+         (setf (getf draw-state :line-style) style)))
+
       (#.+op-set-line-width+
        (setf (getf draw-state :line-width) arg1))
 
@@ -247,12 +263,17 @@
        (let ((cur-x (getf draw-state :x))
              (cur-y (getf draw-state :y))
              (color (getf draw-state :line-color))
+             (style (getf draw-state :line-style))
              (width (getf draw-state :line-width)))
-         (gp:with-graphics-state (pane :foreground color
-                                       :thickness (max 1 (round width)))
-           (gp:draw-line pane
-                         (round cur-x) (round cur-y)
-                         (round x) (round y)))
+         (unless (null style)
+           (gp:with-graphics-state (pane :foreground color
+                                         :thickness (max 1 (round width))
+                                         :dashed (/= 1 (length style))
+                                         :dash style
+                                         )
+                                   (gp:draw-line pane
+                                                 (round cur-x) (round cur-y)
+                                                 (round x) (round y))))
          (setf (getf draw-state :x) x
                (getf draw-state :y) y)))
 
@@ -281,6 +302,7 @@
 
       (let ((draw-state (list :x 0.0 :y 0.0
                               :line-color :black
+                              :line-style nil
                               :line-width 1.0
                               :text-color :black))
             (ptr-rcmd (fli:copy-pointer ptr-rcmds)))
