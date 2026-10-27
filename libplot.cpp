@@ -126,7 +126,7 @@ EXPORT_C void *plt_curve(void *handle_, const float *x, const float *y, int coun
 			}
 
 			if (v && count > 0) {
-				if (plt->autoscale[a]) {
+				if (plt->autorange[a]) {
 					axis->min = v[0];
 					axis->max = v[0];
 					for (int i = 1; i < count; ++i) {

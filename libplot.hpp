@@ -297,7 +297,7 @@ public:
 	Axis axisY;   // primary (left) Y, as r in Polar
 	Axis axisY2;  // secondary (right) Y
 	int activeY = AXIS_PRIMARY;
-	std::map<std::string, bool> autoscale = {{"X", true}, {"Y", true}, {"Y2", true}};
+	std::map<std::string, bool> autorange = {{"X", true}, {"Y", true}, {"Y2", true}};
 
 	std::vector<Curve *> curves;
 
@@ -315,7 +315,7 @@ public:
 			axisX.scale = SCALE_LINEAR;
 			axisX.panEnabled = false;
 			axisX.zoomEnabled = false;
-			autoscale["X"] = false;
+			autorange["X"] = false;
 
 			axisY2.visible = false;
 		}
@@ -544,12 +544,12 @@ public:
 							else if (matches[1] == "Y2")
 								activeY = AXIS_SECONDARY;
 						}
-					} else if (suffix == "autoscale") {
+					} else if (suffix == "autorange") {
 						if (!(coord == COORD_POLAR && axis == &axisX)) {
 							if (value == "true")
-								autoscale[matches[1]] = true;
+								autorange[matches[1]] = true;
 							else if (value == "false")
-								autoscale[matches[1]] = false;
+								autorange[matches[1]] = false;
 						}
 					} else if (suffix == "range") {
 						if (!(coord == COORD_POLAR && axis == &axisX)) {
