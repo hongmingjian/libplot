@@ -279,6 +279,8 @@ private:
 	bool visible = true;
 	float width = 400.0f; //in pixels
 	float height = 300.0f; //ditto
+	std::string title = "";
+
 	std::map<std::string, float> paddings = {{"L", 60}, {"T", 40}, {"R", 60}, {"B", 40}}; //ditto
 
     void applyMargin() {
@@ -298,6 +300,9 @@ public:
 	Axis axisY2;  // secondary (right) Y
 	int activeY = AXIS_PRIMARY;
 	std::map<std::string, bool> autorange = {{"X", true}, {"Y", true}, {"Y2", true}};
+
+	float charWidth = 12.0f; //in pixels
+	float charHeight = 15.0f; //ditto
 
 	std::vector<Curve *> curves;
 
@@ -521,6 +526,15 @@ public:
 				visible = true;
 			else if (value == "false")
 				visible = false;
+		} else if (option == "plot.title") {
+			title = value;
+		} else if (option == "plot.char.size") {
+			int w, h;
+			if (sscanf(value.c_str(), "%dx%d", &w, &h) == 2) {
+				charWidth = w;
+				charHeight = h;
+				return 0;
+			}
 		} else if (std::regex_match(option, std::regex(R"(^plot\.axis(X|Y|Y2)\..+$)"))) {
 			Axis *axis = nullptr;
 			std::smatch matches;
@@ -596,6 +610,8 @@ public:
 						axis->color = value;
 					} else if (suffix == "style") {
 						axis->style = value;
+					} else if (suffix == "label") {
+						axis->label = value;
 					} else if (suffix == "grid.visible") {
 						if (value == "true")
 							axis->grid.visible = true;
@@ -645,7 +661,6 @@ enum MarkerShape {
 struct Curve {
 	Plot *plot = nullptr;
 
-    std::string name = "";
     std::string label = "";
 
     std::vector<float> xData;
@@ -681,6 +696,8 @@ struct Curve {
 			if ((std::sscanf(value.c_str(), "%f", &a) == 1) && (a > 0)) {
 				width = a;
 			}
+		} else if (option == "curve.label") {
+			label = value;
 		} else if (option == "curve.marker.shape") {
 			if (value == "")
 				markerShape = MARKER_NONE;

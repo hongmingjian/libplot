@@ -293,12 +293,22 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 			cmds.push_back(plt_render_cmd_(OP_LINETO, 50, 0, max_edge2.first, max_edge2.second, 0.0f, 0.0f, ""));
 		}
 
+		if (!title.empty()) {
+			max_edge = ToPolarPixel(M_PI_2, axisY.max);
+			cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.color));
+			float yPos = max_edge.second - 2 * charHeight;
+			if (yPos < 0) yPos = 0;
+			cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 50, 0, max_edge.first, yPos, 0, ALIGN_HCENTER | ALIGN_TOP, title));
+		}
+
 	} else if (coord == COORD_CARTESIAN) {
 
 		float pxMin = ToPixelX(axisX.min);
 		float pxMax = ToPixelX(axisX.max);
 		float pyMin = ToPixelY(axisY.max);//!
 		float pyMax = ToPixelY(axisY.min);//!
+
+		int nCharsYTicks = 0, nCharsY2Ticks = 0;
 
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 10, 0, 0.0f, 0.0f, 1.0f, 0.0f, ""));
 
@@ -330,7 +340,10 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 			}
 
 			if (axisY.tick.visible) {
-				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, pxMin, py, 0.0f, ALIGN_RIGHT | ALIGN_VCENTER, FormatNumber(y, axisY.scale)));
+				std::string s = FormatNumber(y, axisY.scale);
+				if (s.size() > nCharsYTicks)
+					nCharsYTicks = s.size();
+				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, pxMin, py, 0.0f, ALIGN_RIGHT | ALIGN_VCENTER, s));
 			}
 		}
 
@@ -339,7 +352,11 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 				float py = ToPixelY(y2, AXIS_SECONDARY);
 				if (axisY.tick.visible) {
 					cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY2.tick.color));
-					cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, pxMax, py, 0.0f, ALIGN_LEFT | ALIGN_VCENTER, FormatNumber(y2, axisY2.scale)));
+
+					std::string s = FormatNumber(y2, axisY2.scale);
+					if (s.size() > nCharsY2Ticks)
+						nCharsY2Ticks = s.size();
+					cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, pxMax, py, 0.0f, ALIGN_LEFT | ALIGN_VCENTER, s));
 				}
 			}
 		}
@@ -351,6 +368,14 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 
 			cmds.push_back(plt_render_cmd_(OP_MOVETO, 50, 0, pxMin, pyMax, 0.0f, 0.0f, ""));
 			cmds.push_back(plt_render_cmd_(OP_LINETO, 50, 0, pxMax, pyMax, 0.0f, 0.0f, ""));
+
+			if (!axisX.label.empty()) {
+				cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.color));
+
+				float yPos = pyMax + charHeight;
+				if (yPos > height) yPos = height;
+				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 50, 0, (pxMin+pxMax)/2, yPos, 0.0f, ALIGN_HCENTER | ALIGN_TOP, axisX.label));
+			}
 		}
 		if (axisY.visible) {
 			cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.color));
@@ -359,6 +384,13 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 
 			cmds.push_back(plt_render_cmd_(OP_MOVETO, 50, 0, pxMin, pyMin, 0.0f, 0.0f, ""));
 			cmds.push_back(plt_render_cmd_(OP_LINETO, 50, 0, pxMin, pyMax, 0.0f, 0.0f, ""));
+
+			if (!axisY.label.empty()) {
+				cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY.color));
+				float xPos = pxMin-nCharsYTicks*charWidth;
+				if (xPos < 0) xPos = 0;
+				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 50, 0, xPos, (pyMin+pyMax)/2, M_PI_2, ALIGN_HCENTER | ALIGN_TOP, axisY.label));
+			}
 		}
 		if (axisY2.visible) {
 			cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY2.color));
@@ -367,6 +399,21 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 
 			cmds.push_back(plt_render_cmd_(OP_MOVETO, 50, 0, pxMax, pyMin, 0.0f, 0.0f, ""));
 			cmds.push_back(plt_render_cmd_(OP_LINETO, 50, 0, pxMax, pyMax, 0.0f, 0.0f, ""));
+
+			if (!axisY2.label.empty()) {
+				cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY2.color));
+
+				float xPos = pxMax+nCharsY2Ticks*charWidth;
+				if (xPos > width) xPos = width;
+				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 50, 0, xPos, (pyMin+pyMax)/2, M_PI_2, ALIGN_HCENTER | ALIGN_BOTTOM, axisY2.label));
+			}
+		}
+
+		if (!title.empty()) {
+			cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.color));
+			float yPos = pyMin - 2 * charHeight;
+			if (yPos < 0) yPos = 0;
+			cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 50, 0, (pxMin+pxMax)/2, yPos, 0, ALIGN_HCENTER | ALIGN_TOP, title));
 		}
 	}
 
