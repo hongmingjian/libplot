@@ -68,6 +68,7 @@ struct Axis {
 	float width = 1.0f;
     std::string color = "#000000";
     std::string style = "-";
+	std::string unit = "";
 
     Tick tick;
     Grid grid;
@@ -615,6 +616,8 @@ public:
 						axis->style = value;
 					} else if (suffix == "label") {
 						axis->label = value;
+					} else if (suffix == "unit") {
+						axis->unit = value;
 					} else if (suffix == "grid.visible") {
 						if (value == "true")
 							axis->grid.visible = true;

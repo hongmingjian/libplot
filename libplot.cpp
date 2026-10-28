@@ -193,15 +193,45 @@ EXPORT_C int plt_render(void *plt_, struct plt_render_cmd *out, int nout)
 #include <sstream>
 #include <iomanip>
 
-static std::string FormatNumber(float val, int scale)
+static std::string FormatNumber(float val, int scale, std::string unit = "")
 {
-	std::ostringstream oss;
-	if (scale == SCALE_LOG && (val >= 1000.0 || val <= 0.001)) {
-		oss << std::scientific << std::setprecision(0) << val;
-		return oss.str();
-	}
-	oss << std::setprecision(4) << val;
-	return oss.str();
+    std::ostringstream oss;
+
+    if (unit.empty()) {
+        if (scale == SCALE_LOG && (val >= 1000.0f || val <= 0.001f)) {
+            oss << std::scientific << std::setprecision(0) << val;
+            return oss.str();
+        }
+        oss << std::setprecision(4) << val;
+        return oss.str();
+    }
+
+    if (val == 0.0f) {
+        oss << std::setprecision(4) << 0.0f << " " << unit;
+        return oss.str();
+    }
+
+    if (scale == SCALE_LOG && (val >= 1000.0f || val <= 0.001f)) {
+        oss << std::scientific << std::setprecision(0) << val << " " << unit;
+        return oss.str();
+    }
+
+    static const char* prefixes[] = { "p", "u", "m", "", "k", "M", "G", "T" };
+
+    float scaled_val = val;
+    int index = 3; // "" (10^0)
+
+    while (std::abs(scaled_val) >= 1000.0f && index < 7) {
+        scaled_val /= 1000.0f;
+        index++;
+    }
+    while (std::abs(scaled_val) < 1.0f && std::abs(scaled_val) > 0.0f && index > 0) {
+        scaled_val *= 1000.0f;
+        index--;
+    }
+
+    oss << std::setprecision(4) << scaled_val << " " << prefixes[index] << unit;
+    return oss.str();
 }
 
 inline struct plt_render_cmd plt_render_cmd_(
@@ -266,7 +296,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 					cmds.push_back(plt_render_cmd_(OP_DRAW_ELLIPSE, 10, 0, cx, cy, pixelR, pixelR, ""));
 				}
 				if (axisY.tick.visible) {
-					cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, edge.first, edge.second, 0.0f, ALIGN_HCENTER | ALIGN_TOP, FormatNumber(r, SCALE_LINEAR)));
+					cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, edge.first, edge.second, 0.0f, ALIGN_HCENTER | ALIGN_TOP, FormatNumber(r, SCALE_LINEAR, axisY.unit)));
 				}
 			}
 		}
@@ -332,7 +362,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 			}
 
 			if (axisX.tick.visible) {
-				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, px, pyMax, 0.0f, ALIGN_HCENTER | ALIGN_TOP, FormatNumber(x, axisX.scale)));
+				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, px, pyMax, 0.0f, ALIGN_HCENTER | ALIGN_TOP, FormatNumber(x, axisX.scale, axisX.unit)));
 			}
 		}
 
@@ -348,7 +378,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 			}
 
 			if (axisY.tick.visible) {
-				std::string s = FormatNumber(y, axisY.scale);
+				std::string s = FormatNumber(y, axisY.scale, axisY.unit);
 				if (s.size() > nCharsYTicks)
 					nCharsYTicks = s.size();
 				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, pxMin, py, 0.0f, ALIGN_RIGHT | ALIGN_VCENTER, s));
@@ -361,7 +391,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 				if (axisY.tick.visible) {
 					cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisY2.tick.color));
 
-					std::string s = FormatNumber(y2, axisY2.scale);
+					std::string s = FormatNumber(y2, axisY2.scale, axisY2.unit);
 					if (s.size() > nCharsY2Ticks)
 						nCharsY2Ticks = s.size();
 					cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, 0, pxMax, py, 0.0f, ALIGN_LEFT | ALIGN_VCENTER, s));
