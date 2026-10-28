@@ -241,8 +241,9 @@
                              (t :top))))
 
          (gp:with-graphics-state (pane :foreground (getf draw-state :text-color))
-                                 (draw-string pane arg3 x y :h-align h-align :v-align v-align
-                                              ))))
+           (gp:with-graphics-transform (pane (gp:apply-rotation-around-point
+                                               (gp:make-transform) (- arg1) x y))
+             (draw-string pane arg3 x y :h-align h-align :v-align v-align)))))
 
       (#.+op-set-line-color+
        (let ((color (parse-color arg3)))
