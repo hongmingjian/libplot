@@ -388,6 +388,9 @@
           (progn
             (setf (window-plt-handle interface) plot)
             (plt-set-option plot "plot.color" "#aaaaaa")
+            (plt-set-option plot "plot.char.size"
+                            (format nil "~Ax~A" (gp:get-font-average-width pane)
+                                    (gp:get-font-height pane)))
 
             (let ((timer (mp:make-timer 'on-tick-timer interface)))
               (setf (window-timer interface) timer)
