@@ -33,6 +33,7 @@ enum {
     OP_MOVETO,         // x, y: position
     OP_LINETO,         // x, y: position
     OP_DRAW_ELLIPSE,   // x, y: center, arg1/2: length of semi-major/minor, arg3: fill color
+	OP_DRAW_RECT,      // x, y: left/top, arg1/2: width/height, arg3: fill color
 
     OP_COUNT
 };

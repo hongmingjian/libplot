@@ -223,6 +223,13 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 	if (coord == COORD_POLAR) {
 		auto [cx, cy] = ToPolarPixel(0.0, 0.0);
 
+		std::pair<float, float> max_edge = ToPolarPixel(0.0, axisY.max);
+		float max_pixel_r = std::abs(max_edge.first - cx);
+		if (max_pixel_r > 0) {
+			cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 5, 0, 0.0f, 0.0f, 0.0f, 0.0f, ""));
+			cmds.push_back(plt_render_cmd_(OP_DRAW_ELLIPSE, 5, 0, cx, cy, max_pixel_r, max_pixel_r, color));
+		}
+
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 10, 0, 0.0f, 0.0f, 1.0f, 0.0f, ""));
 
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.color));
@@ -264,9 +271,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 			}
 		}
 
-		std::pair<float, float> max_edge = ToPolarPixel(0.0, axisY.max);
 		if (axisX.visible) {
-			float max_pixel_r = std::abs(max_edge.first - cx);
 			if (max_pixel_r > 0) {
 				cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 50, 0, 0.0f, 0.0f, axisX.width, 0.0f, ""));
 				cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 50, 0, 0.0f, 0.0f, 0.0f, 0.0f, axisX.color));
@@ -307,6 +312,9 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 		float pxMax = ToPixelX(axisX.max);
 		float pyMin = ToPixelY(axisY.max);//!
 		float pyMax = ToPixelY(axisY.min);//!
+
+		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 5, 0, 0.0f, 0.0f, 0.0f, 0.0f, ""));
+		cmds.push_back(plt_render_cmd_(OP_DRAW_RECT, 5, 0, pxMin, pyMin, pxMax-pxMin, pyMax-pyMin, color));
 
 		int nCharsYTicks = 0, nCharsY2Ticks = 0;
 
@@ -484,11 +492,12 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 				} else if (curve->markerShape == MARKER_CIRCLE) {
 					cmds.push_back(plt_render_cmd_(OP_DRAW_ELLIPSE, 30, 0, px, py, h, h, ""));
 				} else if (curve->markerShape == MARKER_SQUARE) {
-					cmds.push_back(plt_render_cmd_(OP_MOVETO, 30, 0, px - h, py - h, 0.0f, 0.0f, ""));
-					cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px + h, py - h, 0.0f, 0.0f, ""));
-					cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px + h, py + h, 0.0f, 0.0f, ""));
-					cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px - h, py + h, 0.0f, 0.0f, ""));
-					cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px - h, py - h, 0.0f, 0.0f, ""));
+					cmds.push_back(plt_render_cmd_(OP_DRAW_RECT, 30, 0, px-h, py-h, 2 * h, 2 * h, ""));
+					//cmds.push_back(plt_render_cmd_(OP_MOVETO, 30, 0, px - h, py - h, 0.0f, 0.0f, ""));
+					//cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px + h, py - h, 0.0f, 0.0f, ""));
+					//cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px + h, py + h, 0.0f, 0.0f, ""));
+					//cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px - h, py + h, 0.0f, 0.0f, ""));
+					//cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px - h, py - h, 0.0f, 0.0f, ""));
 				} else if (curve->markerShape == MARKER_TRIANGLE) {
 					cmds.push_back(plt_render_cmd_(OP_MOVETO, 30, 0, px, py - h, 0.0f, 0.0f, ""));
 					cmds.push_back(plt_render_cmd_(OP_LINETO, 30, 0, px - h, py + h, 0.0f, 0.0f, ""));

@@ -193,6 +193,25 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct plt_render_cmd>& cmds) {
 				DeleteObject(hCurBrush);
             break;
             }
+        case OP_DRAW_RECT: {
+			HBRUSH hCurBrush = NULL;
+			HBRUSH hOldBrush = NULL;
+			if (std::string(cmd.arg3) == "") {
+				hOldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+			} else {
+				hCurBrush = CreateSolidBrush(convertColor(cmd.arg3));
+				hOldBrush = (HBRUSH)SelectObject(hdc, hCurBrush);
+			}
+
+            Rectangle(hdc, (int)(cmd.x), (int)(cmd.y),
+					       (int)(cmd.x + cmd.arg1), (int)(cmd.y + cmd.arg2));
+
+			if (hOldBrush)
+				SelectObject(hdc, hOldBrush);
+			if (hCurBrush)
+				DeleteObject(hCurBrush);
+            break;
+            }
         }
     }
 	if (hOldPen)

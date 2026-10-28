@@ -44,6 +44,7 @@
 (defconstant +op-moveto+         6)
 (defconstant +op-lineto+         7)
 (defconstant +op-draw-ellipse+   8)
+(defconstant +op-draw-rect+      9)
 
 (defconstant +align-left+     #x00000000)
 (defconstant +align-hcenter+  #x00000001)
@@ -286,6 +287,16 @@
          (gp:with-graphics-state (pane :foreground border-color)
                                  (gp:draw-ellipse pane x y arg1 arg2 :filled nil))))
 
+      (#.+op-draw-rect+
+       (let ((border-color (getf draw-state :line-color))
+             (fill-color (parse-color arg3)))
+         (unless (null fill-color)
+           (gp:with-graphics-state (pane :foreground fill-color)
+                                   (gp:draw-rectangle pane x y arg1 arg2 :filled t)))
+         (gp:with-graphics-state (pane :foreground border-color)
+                                 (gp:draw-rectangle pane x y arg1 arg2 :filled nil))))
+
+
       (t nil)
       )))
 
@@ -375,6 +386,7 @@
           (error "Failed to create a plot")
           (progn
             (setf (window-plt-handle interface) plot)
+            (plt-set-option plot "plot.color" "#aaaaaa")
 
             (let ((timer (mp:make-timer 'on-tick-timer interface)))
               (setf (window-timer interface) timer)

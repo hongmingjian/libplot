@@ -280,6 +280,7 @@ private:
 	float width = 400.0f; //in pixels
 	float height = 300.0f; //ditto
 	std::string title = "";
+    std::string color = ""; // background color, empty for transparent
 
 	std::map<std::string, float> paddings = {{"L", 60}, {"T", 40}, {"R", 60}, {"B", 40}}; //ditto
 
@@ -528,6 +529,8 @@ public:
 				visible = false;
 		} else if (option == "plot.title") {
 			title = value;
+		} else if (option == "plot.color") {
+			color = value;
 		} else if (option == "plot.char.size") {
 			int w, h;
 			if (sscanf(value.c_str(), "%dx%d", &w, &h) == 2) {
