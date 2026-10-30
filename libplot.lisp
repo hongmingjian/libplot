@@ -28,10 +28,9 @@
   (arg2 :float)
   (arg3 (:ef-mb-string :limit 64)))
 
-(declaim (inline cmd-op cmd-z-index cmd-flags))
+(declaim (inline cmd-op cmd-z-index))
 (defun cmd-op (cmd)      (ldb (byte 8 0) cmd))
 (defun cmd-z-index (cmd) (ldb (byte 8 8) cmd))
-(defun cmd-flags (cmd)   (ldb (byte 16 16) cmd))
 
 (defconstant +coord-cartesian+ 0)
 (defconstant +coord-polar+ 1)
@@ -379,7 +378,7 @@
 (defun on-create-pane (pane)
   (let ((interface (capi:element-interface pane)))
     (fli:register-module "libplot"
-                         :real-name "Z:\\hmj\\Sourcery\\libplot\\Release\\libplot.dll"
+                         :real-name "Z:\\hmj\\Sourcery\\libplot\\Debug\\libplot.dll"
                          )
     (let ((plot (plt-create (window-plt-coord interface))))
       (if (fli:null-pointer-p plot)
@@ -393,6 +392,8 @@
                                     ;(multiple-value-bind (left top right bottom) (gp:get-character-extent pane #\W) (- right left))
                                     (gp:get-font-average-width pane)
                                     (gp:get-font-height pane)))
+            (plt-set-option plot "plot.axisX.label" "Frequency")
+            (plt-set-option plot "plot.axisY.label" "a.u.")
 
             (let ((timer (mp:make-timer 'on-tick-timer interface)))
               (setf (window-timer interface) timer)
