@@ -21,7 +21,7 @@ int plt_render(void *plt, struct plt_render_cmd *out, int nout);
 struct plt_render_cmd {
     unsigned int op     : 8;
     unsigned int zIndex : 8;
-    unsigned int flags  : 16;
+    unsigned int unused : 16;
     float x;
     float y;
     float arg1;
