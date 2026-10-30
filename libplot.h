@@ -1,15 +1,21 @@
 #ifndef LIBPLOT_H
 #define LIBPLOT_H
 
-#ifdef __cplusplus
-#define EXTERN_C extern "C"
-#else
-#define EXTERN_C
-#endif
-#ifdef _MSC_VER
-#define EXPORT_C EXTERN_C __declspec( dllexport )
-#else
-#define EXPORT_C EXTERN_C __attribute__((visibility("default")))
+#ifndef LIBPLOT_EXPORTS
+void *plt_create(int coord);
+void plt_destroy(void *plt);
+
+int plt_set_option(void *handle, const char *option, const char *value);
+
+void plt_pan(void *plt, int dx, int dy);
+void plt_zoom(void *plt, int cx, int cy, float factor);
+void plt_pix2math(void *plt, int px, int py, float *x, float *y, float *y2);
+
+void *plt_curve(void *handle, const float *x, const float *y, int count);
+void plt_append(void *crv, const float *x, const float *y, int count);
+void plt_remove(void *crv);
+
+int plt_render(void *plt, struct plt_render_cmd *out, int nout);
 #endif
 
 struct plt_render_cmd {
@@ -63,20 +69,5 @@ enum {
 	ALIGN_BOTTOM = 0x00020000,
 	ALIGN_BASELINE = 0x00040000
 };
-
-EXPORT_C void *plt_create(int coord);
-EXPORT_C void plt_destroy(void *plt);
-
-EXPORT_C int plt_set_option(void *handle, const char *option, const char *value);
-
-EXPORT_C void plt_pan(void *plt, int dx, int dy);
-EXPORT_C void plt_zoom(void *plt, int cx, int cy, float factor);
-EXPORT_C void plt_pix2math(void *plt, int px, int py, float *x, float *y, float *y2);
-
-EXPORT_C void *plt_curve(void *handle, const float *x, const float *y, int count);
-EXPORT_C void plt_append(void *crv, const float *x, const float *y, int count);
-EXPORT_C void plt_remove(void *plt, void *crv);
-
-EXPORT_C int plt_render(void *plt, struct plt_render_cmd *out, int nout);
 
 #endif // LIBPLOT_H

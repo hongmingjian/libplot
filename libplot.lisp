@@ -131,8 +131,7 @@
           (%plt-append crv x-ptr y-ptr count))))
 
 (fli:define-foreign-function (plt-remove "plt_remove")
-    ((plt :pointer)
-     (crv :pointer))
+    ((crv :pointer))
   :result-type :void
   :module "libplot"
   )
@@ -387,9 +386,12 @@
           (error "Failed to create a plot")
           (progn
             (setf (window-plt-handle interface) plot)
-            (plt-set-option plot "plot.color" "#aaaaaa")
-            (plt-set-option plot "plot.char.size"
-                            (format nil "~Ax~A" (gp:get-font-average-width pane)
+            (plt-set-option plot "plot.title" "Archimedean spiral")
+            (plt-set-option plot "plot.background.color" "#aaaaaa")
+            (plt-set-option plot "plot.font.size"
+                            (format nil "~Ax~A"
+                                    ;(multiple-value-bind (left top right bottom) (gp:get-character-extent pane #\W) (- right left))
+                                    (gp:get-font-average-width pane)
                                     (gp:get-font-height pane)))
 
             (let ((timer (mp:make-timer 'on-tick-timer interface)))
@@ -449,6 +451,8 @@
                    (unless (fli:null-pointer-p crv)
                      (plt-set-option crv "curve.color" "#0000FF")
                      (plt-set-option crv "curve.width" "2")
+                     (plt-set-option crv "curve.marker.color" "#FF0000")
+                     (plt-set-option crv "curve.marker.shape" "s")
                      (push crv crvs)
                      (setf (window-plt-curves interface) crvs)
                      )))

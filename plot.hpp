@@ -57,28 +57,33 @@ struct Grid {
 struct Axis {
 	Plot *plot = nullptr;
 
-    std::string label = "";
-
     int scale = SCALE_LINEAR;
     float min = 0.0f;
     float max = 100.0f;
 	float ratioMargin = 0.08f;
 
-    bool visible = true;
 	float width = 1.0f;
+    bool visible = true;
+    bool panEnabled = true;
+    bool zoomEnabled = true;
+    std::string label = "";
     std::string color = "#000000";
     std::string style = "-";
 	std::string unit = "";
 
+	bool autorange = true;
+	bool autoscroll = false;
+
     Tick tick;
     Grid grid;
 
-    bool panEnabled = true;
-    bool zoomEnabled = true;
-
-	void applyMargin()
+	static constexpr int END_MIN = 0x1;
+	static constexpr int END_MAX = 0x2;
+	void applyMargin(int ends = END_MIN|END_MAX)
 	{
         if (ratioMargin <= 0.0f)
+			return;
+		if (ends == 0)
 			return;
 
 		float d;
@@ -86,12 +91,16 @@ struct Axis {
             float logMin = std::log10(min);
             float logMax = std::log10(max);
 			d = (logMax - logMin) * ratioMargin;
-            min = std::pow(10.0, logMin + d);
-            max = std::pow(10.0, logMax + d);
+			if (ends & END_MIN)
+				min = std::pow(10.0, logMin - d);
+			if (ends & END_MAX)
+				max = std::pow(10.0, logMax + d);
 		} else {
 			d = (max - min) * ratioMargin;
-			min -= d;
-			max += d;
+			if (ends & END_MIN)
+				min -= d;
+			if (ends & END_MAX)
+				max += d;
 		}
     }
 
@@ -157,7 +166,7 @@ struct Axis {
 	{
 		std::vector<float> ticks;
 
-		if (plot && plot->coord == COORD_POLAR && this == &(plot->axisX)) {
+		if (plot && plot->getCoord() == COORD_POLAR && this == &(plot->axisX)) {
 			float interval = tick.interval;
 			while (interval < 0)
 				interval += 2 * M_PI;
@@ -196,9 +205,9 @@ struct Axis {
 		float length = 0.0f;
 		if (plot) {
 			if (this == &(plot->axisY) || this == &(plot->axisY2)) {
-				length = plot->GetClientHeight();
+				length = plot->getClientHeight();
 			} else {
-				length = plot->GetClientWidth();
+				length = plot->getClientWidth();
 			}
 		}
 
@@ -277,13 +286,19 @@ struct Axis {
 
 class Plot {
 private:
-	bool visible = true;
-	float width = 400.0f; //in pixels
-	float height = 300.0f; //ditto
-	std::string title = "";
-    std::string color = ""; // background color, empty for transparent
+	int coord = COORD_CARTESIAN;
 
-	std::map<std::string, float> paddings = {{"L", 60}, {"T", 40}, {"R", 60}, {"B", 40}}; //ditto
+	float plotWidth = 400.0f; //pixels
+	float plotHeight = 300.0f; //pixels
+	float fontWidth = 12.0f; //pixels
+	float fontHeight = 15.0f; //pixels
+
+	std::map<std::string, float> paddings = {{"L", 60}, {"T", 40}, {"R", 60}, {"B", 40}}; //pixels
+
+	std::string title = "";
+    std::string backgroundColor = ""; // empty for transparent
+
+	std::vector<Curve *> curves;
 
     void applyMargin() {
         if (coord == COORD_POLAR)
@@ -295,21 +310,13 @@ private:
     }
 
 public:
-	int coord = COORD_CARTESIAN;
-
 	Axis axisX;   // as theta in Polar
 	Axis axisY;   // primary (left) Y, as r in Polar
 	Axis axisY2;  // secondary (right) Y
 	int activeY = AXIS_PRIMARY;
-	std::map<std::string, bool> autorange = {{"X", true}, {"Y", true}, {"Y2", true}};
 
-	float charWidth = 12.0f; //in pixels
-	float charHeight = 15.0f; //ditto
-
-	std::vector<Curve *> curves;
-
-    Plot(int coord_ = COORD_CARTESIAN) {
-		coord = coord_;
+    Plot(int coord = COORD_CARTESIAN) {
+		this->coord = coord;
 
 		axisX.plot = this;
         axisY.plot = this;
@@ -322,7 +329,7 @@ public:
 			axisX.scale = SCALE_LINEAR;
 			axisX.panEnabled = false;
 			axisX.zoomEnabled = false;
-			autorange["X"] = false;
+			axisX.autorange = false;
 
 			axisY2.visible = false;
 		}
@@ -336,14 +343,97 @@ public:
         curves.clear();
     }
 
-    float GetClientWidth() const { return width - paddings.at("L") - paddings.at("R"); }
-    float GetClientHeight() const { return height - paddings.at("T") - paddings.at("B"); }
+	template<typename T = int>
+	Curve *addCurve(Curve *curve) {
+		curves.push_back(curve);
+		autoRange();
+		return curve;
+	}
+	template<typename T = int>
+	Curve *removeCurve(Curve *curve) {
+		auto it = std::find(curves.begin(), curves.end(), curve);
+		if (it != curves.end()) {
+			curves.erase(it);
+			autoRange();
+			return *it;
+		}
+		return nullptr;
+	}
+	int getCoord() const { return coord; }
+    float getClientWidth() const { return plotWidth - paddings.at("L") - paddings.at("R"); }
+    float getClientHeight() const { return plotHeight - paddings.at("T") - paddings.at("B"); }
 
-    float ToPixelX(float mathX) const {
+	template<typename T = int>
+	void autoRange(bool force = true) {
+		for (auto name: {"X", "Y", "Y2"}) {
+			Axis *axis = nullptr;
+			if (name == "X")
+				axis = &axisX;
+			else if (name == "Y")
+				axis = &axisY;
+			else if (name == "Y2")
+				axis = &axisY2;
+			if (!axis->autorange)
+				continue;
+			if (!axis->visible)
+				continue;
+
+			std::pair<float, float> minmax{std::numeric_limits<float>::max(),
+				                           std::numeric_limits<float>::lowest()};
+			for (Curve *curve: curves) {
+				if (!curve->visible)
+					continue;
+
+				std::pair<float, float> minmax1;
+				bool update = false;
+				if (name == "X") {
+					if (curve->getXData().empty())
+						continue;
+					minmax1 = curve->getXMinMax();
+					update = true;
+				} else {
+					if (curve->getYData().empty())
+						continue;
+					minmax1 = curve->getYMinMax();
+
+					if (name == "Y") {
+						if (curve->axisY == AXIS_PRIMARY)
+							update = true;
+					} else if (name == "Y2") {
+						if (curve->axisY == AXIS_SECONDARY)
+							update = true;
+					}
+				}
+
+				if (update) {
+					if (minmax1.first < minmax.first)
+						minmax.first = minmax1.first;
+					if (minmax1.second > minmax.second)
+						minmax.second = minmax1.second;
+				}
+			}
+
+			if (minmax.first >= minmax.second)
+				continue;
+
+			int ends = 0;
+			if (force || axis->min > minmax.first) {
+				axis->min = minmax.first;
+				ends |= Axis::END_MIN;
+			}
+			if (force || axis->max < minmax.second) {
+				axis->max = minmax.second;
+				ends |= Axis::END_MAX;
+			}
+			axis->applyMargin(ends);
+		}
+	}
+
+    float toPixelX(float mathX) const {
 		if (mathX == axisX.min)
 			return paddings.at("L");
 		if (mathX == axisX.max)
-			return paddings.at("L") + GetClientWidth();
+			return paddings.at("L") + getClientWidth();
 
 		if (!std::isnormal(axisX.max - axisX.min))
 			return std::numeric_limits<float>::infinity();
@@ -353,17 +443,17 @@ public:
             float logMin = std::log10(axisX.min);
             float logMax = std::log10(axisX.max);
 
-            return paddings.at("L") + (logX - logMin) / (logMax - logMin) * GetClientWidth();
+            return paddings.at("L") + (logX - logMin) / (logMax - logMin) * getClientWidth();
         }
-        return paddings.at("L") + (mathX - axisX.min) / (axisX.max - axisX.min) * GetClientWidth();
+        return paddings.at("L") + (mathX - axisX.min) / (axisX.max - axisX.min) * getClientWidth();
     }
 
-    float ToPixelY(float mathY, int which = AXIS_PRIMARY) const {
+    float toPixelY(float mathY, int which = AXIS_PRIMARY) const {
 		const Axis& axis = (which == AXIS_SECONDARY) ? axisY2 : axisY;
 		if (mathY == axis.min)
-			return height - paddings.at("B");
+			return plotHeight - paddings.at("B");
 		if (mathY == axis.max)
-			return height - paddings.at("B") - GetClientHeight();
+			return plotHeight - paddings.at("B") - getClientHeight();
 
 		if (!std::isnormal(axis.max - axis.min))
 			return std::numeric_limits<float>::infinity();
@@ -372,34 +462,34 @@ public:
             float logY = std::log10(mathY);
             float logMin = std::log10(axis.min);
             float logMax = std::log10(axis.max);
-            return (height - paddings.at("B")) - (logY - logMin) / (logMax - logMin) * GetClientHeight();
+            return (plotHeight - paddings.at("B")) - (logY - logMin) / (logMax - logMin) * getClientHeight();
         }
-        return (height - paddings.at("B")) - (mathY - axis.min) / (axis.max - axis.min) * GetClientHeight();
+        return (plotHeight - paddings.at("B")) - (mathY - axis.min) / (axis.max - axis.min) * getClientHeight();
     }
 
-    float ToMathX(float pixelX) const {
+    float toMathX(float pixelX) const {
         if (axisX.scale == SCALE_LOG) {
             float logMin = std::log10(axisX.min);
             float logMax = std::log10(axisX.max);
-            return std::pow(10.0, logMin + (logMax - logMin) * (pixelX - paddings.at("L")) / GetClientWidth());
+            return std::pow(10.0, logMin + (logMax - logMin) * (pixelX - paddings.at("L")) / getClientWidth());
         }
-        return axisX.min + (axisX.max - axisX.min) * (pixelX - paddings.at("L")) / GetClientWidth();
+        return axisX.min + (axisX.max - axisX.min) * (pixelX - paddings.at("L")) / getClientWidth();
     }
 
-    float ToMathY(float pixelY, int which = AXIS_PRIMARY) const {
+    float toMathY(float pixelY, int which = AXIS_PRIMARY) const {
 		const Axis& axis = (which == AXIS_SECONDARY) ? axisY2 : axisY;
         if (axis.scale == SCALE_LOG) {
             float logMin = std::log10(axis.min);
             float logMax = std::log10(axis.max);
-            return std::pow(10.0, logMin + (logMax - logMin) * (height - paddings.at("B") - pixelY) / GetClientHeight());
+            return std::pow(10.0, logMin + (logMax - logMin) * (plotHeight - paddings.at("B") - pixelY) / getClientHeight());
         }
-        return axis.min + (axis.max - axis.min) * (height - paddings.at("B") - pixelY) / GetClientHeight();
+        return axis.min + (axis.max - axis.min) * (plotHeight - paddings.at("B") - pixelY) / getClientHeight();
     }
 
-    std::pair<float, float> ToPolarPixel(float theta, float r) const {
-        float cx = paddings.at("L") + GetClientWidth() / 2.0f;
-        float cy = paddings.at("T") + GetClientHeight() / 2.0f;
-        float maxPixelR = std::min(GetClientWidth(), GetClientHeight()) / 2.0f;
+    std::pair<float, float> toPolarPixel(float theta, float r) const {
+        float cx = paddings.at("L") + getClientWidth() / 2.0f;
+        float cy = paddings.at("T") + getClientHeight() / 2.0f;
+        float maxPixelR = std::min(getClientWidth(), getClientHeight()) / 2.0f;
 
 		if (r == 0.0f || r == axisY.min)
 			return {cx, cy};
@@ -425,10 +515,10 @@ public:
                 cy - (r - rmin) / (rmax - rmin) * maxPixelR * std::sin(theta)};
     }
 
-    std::pair<float, float> ToPolarMath(float pixelX, float pixelY) const {
-        float cx = paddings.at("L") + GetClientWidth() / 2.0f;
-        float cy = paddings.at("T") + GetClientHeight() / 2.0f;
-        float maxPixelR = std::min(GetClientWidth(), GetClientHeight()) / 2.0f;
+    std::pair<float, float> toPolarMath(float pixelX, float pixelY) const {
+        float cx = paddings.at("L") + getClientWidth() / 2.0f;
+        float cy = paddings.at("T") + getClientHeight() / 2.0f;
+        float maxPixelR = std::min(getClientWidth(), getClientHeight()) / 2.0f;
 
         float dx = pixelX - cx;
         float dy = cy - pixelY;
@@ -451,14 +541,14 @@ public:
 
 	void pix2math(int pixelX, int pixelY, float *x, float *y, float *y2) const {
         if (coord == COORD_POLAR) {
-			auto mathXY = ToPolarMath(pixelX, pixelY);
+			auto mathXY = toPolarMath(pixelX, pixelY);
 			*x = mathXY.first;
 			*y = mathXY.second;
 		} else {
-			*x = ToMathX(pixelX);
-			*y = ToMathY(pixelY);
+			*x = toMathX(pixelX);
+			*y = toMathY(pixelY);
 			if (axisY2.visible)
-				*y2 = ToMathY(pixelY, AXIS_SECONDARY);
+				*y2 = toMathY(pixelY, AXIS_SECONDARY);
 		}
 	}
 
@@ -467,29 +557,29 @@ public:
         if (pixelXDelta == 0 && pixelYDelta == 0)
 			return;
 
-        float plotWidth  = GetClientWidth();
-        float plotHeight = GetClientHeight();
+        float plotWidth  = getClientWidth();
+        float plotHeight = getClientHeight();
 
         if (pixelXDelta != 0) {
             if (axisX.scale == SCALE_LOG) {
                 axisX.pan(-(std::log10(axisX.max) - std::log10(axisX.min)) * pixelXDelta / plotWidth);
             } else {
-                axisX.pan(-(ToMathX(pixelXDelta) - ToMathX(0.0f)));
+                axisX.pan(-(toMathX(pixelXDelta) - toMathX(0.0f)));
             }
         }
 
         if (pixelYDelta != 0) {
             if (axisY.scale == SCALE_LOG) {
                 if (coord == COORD_POLAR) {
-					axisY.pan(std::log10(ToPolarMath(pixelXDelta, pixelYDelta).second) - std::log10(ToPolarMath(0.0f, 0.0f).second));
+					axisY.pan(std::log10(toPolarMath(pixelXDelta, pixelYDelta).second) - std::log10(toPolarMath(0.0f, 0.0f).second));
                 } else {
 					axisY.pan((std::log10(axisY.max) - std::log10(axisY.min)) * pixelYDelta / plotHeight);
                 }
             } else {
                 if (coord == COORD_POLAR) {
-                    axisY.pan(ToPolarMath(pixelXDelta, pixelYDelta).second - ToPolarMath(0.0f, 0.0f).second);
+                    axisY.pan(toPolarMath(pixelXDelta, pixelYDelta).second - toPolarMath(0.0f, 0.0f).second);
                 } else {
-                    axisY.pan(-(ToMathY(pixelYDelta) - ToMathY(0.0f)));
+                    axisY.pan(-(toMathY(pixelYDelta) - toMathY(0.0f)));
                 }
             }
 
@@ -497,7 +587,7 @@ public:
 				if (axisY2.scale == SCALE_LOG) {
 					axisY2.pan((std::log10(axisY2.max) - std::log10(axisY2.min)) * pixelYDelta / plotHeight);
 				} else {
-					axisY2.pan(-(ToMathY(pixelYDelta, AXIS_SECONDARY) - ToMathY(0.0f, AXIS_SECONDARY)));
+					axisY2.pan(-(toMathY(pixelYDelta, AXIS_SECONDARY) - toMathY(0.0f, AXIS_SECONDARY)));
 				}
 			}
         }
@@ -505,13 +595,13 @@ public:
 
     void zoom(int pixelX, int pixelY, float factor)
 	{
-		axisX.zoom(ToMathX(pixelX), factor);
+		axisX.zoom(toMathX(pixelX), factor);
 		if (coord == COORD_POLAR)
 			axisY.zoom(axisY.min, factor); // only zoom in and out around the center
 		else
-			axisY.zoom(ToMathY(pixelY), factor);
+			axisY.zoom(toMathY(pixelY), factor);
 		if (axisY2.visible)
-			axisY2.zoom(ToMathY(pixelY, AXIS_SECONDARY), factor);
+			axisY2.zoom(toMathY(pixelY, AXIS_SECONDARY), factor);
     }
 
 
@@ -519,24 +609,19 @@ public:
 		if (option == "plot.size") {
 			int w, h;
 			if (sscanf(value.c_str(), "%dx%d", &w, &h) == 2) {
-				width = w;
-				height = h;
+				plotWidth = w;
+				plotHeight = h;
 				return 0;
 			}
-		} else if (option == "plot.visible") {
-			if (value == "true")
-				visible = true;
-			else if (value == "false")
-				visible = false;
 		} else if (option == "plot.title") {
 			title = value;
-		} else if (option == "plot.color") {
-			color = value;
-		} else if (option == "plot.char.size") {
+		} else if (option == "plot.background.color") {
+			backgroundColor = value;
+		} else if (option == "plot.font.size") {
 			int w, h;
 			if (sscanf(value.c_str(), "%dx%d", &w, &h) == 2) {
-				charWidth = w;
-				charHeight = h;
+				fontWidth = w;
+				fontHeight = h;
 				return 0;
 			}
 		} else if (std::regex_match(option, std::regex(R"(^plot\.axis(X|Y|Y2)\..+$)"))) {
@@ -565,9 +650,16 @@ public:
 					} else if (suffix == "autorange") {
 						if (!(coord == COORD_POLAR && axis == &axisX)) {
 							if (value == "true")
-								autorange[matches[1]] = true;
+								axis->autorange = true;
 							else if (value == "false")
-								autorange[matches[1]] = false;
+								axis->autorange = false;
+						}
+					} else if (suffix == "autoscroll") {
+						if (!(coord == COORD_POLAR && axis == &axisX)) {
+							if (value == "true")
+								axis->autoscroll = true;
+							else if (value == "false")
+								axis->autoscroll = false;
 						}
 					} else if (suffix == "range") {
 						if (!(coord == COORD_POLAR && axis == &axisX)) {
@@ -653,39 +745,97 @@ public:
 	int render(struct plt_render_cmd *out, size_t nout) const;
 };
 
-enum MarkerShape {
-    MARKER_NONE = 0,
-    MARKER_X,        // 'x'
-	MARKER_DOT,		 // '.'
-    MARKER_PLUS,     // '+'
-    MARKER_CIRCLE,   // 'o'
-    MARKER_SQUARE,   // 's'
-    MARKER_TRIANGLE, // '^'
-    MARKER_DIAMOND   // 'd'
-};
-
 struct Curve {
 	Plot *plot = nullptr;
-
-    std::string label = "";
-
-    std::vector<float> xData;
-    std::vector<float> yData;
+	int axisY = AXIS_PRIMARY;
 
 	bool visible = true;
+    float width = 2.0f; // pixels
+    std::string label = "";
     std::string color = "#000000";
     std::string style = "-";
-    float width = 1.5f;
 
-	int axis = AXIS_PRIMARY;
-
-	MarkerShape markerShape = MARKER_NONE; // None for no marker
-	float markerSize = 6.0f; // in pixels
+	std::string markerShape = "";
+	float markerSize = 6.0f; // pixels
 	std::string markerColor = "#000000";
 
     Curve(Plot *plot) {
 		this->plot = plot;
-		axis = plot->activeY;
+
+		axisY = plot->activeY;
+		plot->addCurve(this);
+	}
+    ~Curve() {
+		plot->removeCurve(this);
+	}
+	const std::vector<float> &getXData() const { return xData; }
+	const std::vector<float> &getYData() const { return yData; }
+	std::pair<float, float> getXMinMax() const { return {xmin, xmax}; }
+	std::pair<float, float> getYMinMax() const { return {ymin, ymax}; }
+
+	void updateData(const std::vector<float> &x, const std::vector<float> &y) {
+		xData.assign(x.begin(), x.end());
+		yData.assign(y.begin(), y.end());
+
+		if (!x.empty()) {
+			auto [min_it, max_it] = std::minmax_element(x.begin(), x.end());
+			xmin = *min_it;
+			xmax = *max_it;
+		}
+		if (!y.empty()) {
+			auto [min_it, max_it] = std::minmax_element(y.begin(), y.end());
+			ymin = *min_it;
+			ymax = *max_it;
+		}
+
+		plot->autoRange();
+	}
+	void appendData(const std::vector<float> &x, const std::vector<float> &y) {
+		xData.insert(xData.end(), x.begin(), x.end());
+		yData.insert(yData.end(), y.begin(), y.end());
+
+		if (!x.empty()) {
+			auto [min_it, max_it] = std::minmax_element(x.begin(), x.end());
+			if (xmin > *min_it)
+				xmin = *min_it;
+			if (xmax < *max_it)
+				xmax = *max_it;
+
+			Axis *axis = &plot->axisX;
+			if (axis->autoscroll) {
+				float delta = 0;
+
+				if (xmax > axis->max)
+					delta = (xmax - axis->max) + (axis->max - axis->min) / 2;
+				else if (xmin < axis->min)
+					delta = -((axis->min - xmin) + (axis->max - axis->min) / 2);
+
+				axis->pan(delta);
+			}
+		}
+		if (!y.empty()) {
+			auto [min_it, max_it] = std::minmax_element(y.begin(), y.end());
+			if (ymin > *min_it)
+				ymin = *min_it;
+			if (ymax < *max_it)
+				ymax = *max_it;
+
+			Axis *axis = nullptr;
+			if (axisY == AXIS_PRIMARY)
+				axis = &plot->axisY;
+			else
+				axis = &plot->axisY2;
+			if (axis->autoscroll) {
+				float delta = 0;
+
+				if (ymax > axis->max)
+					delta = (ymax - axis->max) + (axis->max - axis->min) / 2;
+				else if (ymin < axis->min)
+					delta = -((axis->min - ymin) + (axis->max - axis->min) / 2);
+
+				axis->pan(delta);
+			}
+		}
 	}
     int set_option(const std::string& option, const std::string& value) {
 		if (option == "curve.visible") {
@@ -705,22 +855,7 @@ struct Curve {
 		} else if (option == "curve.label") {
 			label = value;
 		} else if (option == "curve.marker.shape") {
-			if (value == "")
-				markerShape = MARKER_NONE;
-			else if (value == "x")
-				markerShape = MARKER_X;
-			else if (value == ".")
-				markerShape = MARKER_DOT;
-			else if (value == "+")
-				markerShape = MARKER_PLUS;
-			else if (value == "o")
-				markerShape = MARKER_CIRCLE;
-			else if (value == "s")
-				markerShape = MARKER_SQUARE;
-			else if (value == "^")
-				markerShape = MARKER_TRIANGLE;
-			else if (value == "d")
-				markerShape = MARKER_DIAMOND;
+			markerShape = value;
 		} else if (option == "curve.marker.size") {
 			float a;
 			if ((std::sscanf(value.c_str(), "%f", &a) == 1) && (a > 0)) {
@@ -732,6 +867,13 @@ struct Curve {
 
 		return 0;
 	}
+
+private:
+    std::vector<float> xData;
+    std::vector<float> yData;
+
+	// cache
+	float xmin, xmax, ymin, ymax;
 };
 
 #endif // LIBPLOT_HPP

@@ -411,7 +411,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			GetTextMetrics(hdcScreen, &tm);
 			char buf[64];
 			sprintf_s(buf, "%dx%d", tm.tmMaxCharWidth, tm.tmHeight);
-			pfnSetOption(g_plt, "plot.char.size", buf);
+			pfnSetOption(g_plt, "plot.font.size", buf);
 		}
         if (g_plt && pfnRender) {
 			const int MAX_OUT_COMMANDS = 1024;
