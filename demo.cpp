@@ -1,5 +1,5 @@
 //
-// cl.exe /EHsc /MDd /utf-8 /Zi /I. /D_DEBUG /DUNICODE /D_UNICODE testlibplot.cpp /link /DEBUG /SUBSYSTEM:WINDOWS user32.lib gdi32.lib
+// cl.exe /std:c++17 /EHsc /MDd /utf-8 /Zi /I. /D_DEBUG /DUNICODE /D_UNICODE demo.cpp plot.cpp /link /DEBUG /SUBSYSTEM:WINDOWS user32.lib gdi32.lib
 //
 #define _USE_MATH_DEFINES
 #include <windows.h>
@@ -12,31 +12,12 @@
 #include <sstream>
 #include <random>
 
-#include "libplot.h"
+#include "plot.hpp"
 
-typedef void *(*FuncCreate)(int);
-typedef void  (*FuncDestroy)(void*);
-typedef void *(*FuncCurve)(void*, const float*, const float*, int);
-typedef int   (*FuncSetOption)(void*, const char*, const char*);
-typedef void  (*FuncPan)(void*, int, int);
-typedef void  (*FuncZoom)(void*, int, int, float);
-typedef void  (*FuncPix2Math)(void *, int, int, float*, float*, float*);
-typedef int   (*FuncRender)(void*, struct plt_render_cmd *, int);
-
-HMODULE            hPlotDll         = nullptr;
-FuncCreate pfnCreate = nullptr;
-FuncDestroy pfnDestroy = nullptr;
-FuncCurve           pfnCurve          = nullptr;
-FuncSetOption      pfnSetOption     = nullptr;
-FuncPan            pfnPan           = nullptr;
-FuncZoom           pfnZoom          = nullptr;
-FuncPix2Math  pfnPix2Math = nullptr;
-FuncRender           pfnRender          = nullptr;
-
-int g_canvasWidth  = 550;
-int g_canvasHeight = 450;
-void *g_plt = nullptr;
-std::vector<void *> g_curves;
+int g_plotWidth  = 550;
+int g_plotHeight = 450;
+Plot *g_plt = nullptr;
+std::vector<Curve *> g_curves;
 int g_coord = COORD_POLAR;//CARTESIAN;
 int g_idTimer = 1001;
 static bool g_isPanning = false;
@@ -226,18 +207,32 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_CREATE: {
 		SetTimer(hWnd, g_idTimer, 1000, NULL);
 
-        if (pfnCreate)
-			g_plt = pfnCreate(g_coord);
+		g_plt = new Plot(g_coord);
 
-		if (g_plt && pfnSetOption) {
-//			pfnSetOption(g_plt, "plot.axisX.tick.visible", "true");
-//			pfnSetOption(g_plt, "plot.axisX.grid.visible", "false");
-//			pfnSetOption(g_plt, "plot.axisY.visible", "true");
-//			pfnSetOption(g_plt, "plot.axisY.color", "#0000FF");
-//			pfnSetOption(g_plt, "plot.axisY.tick.color", "#0000FF");
-//			pfnSetOption(g_plt, "plot.axisY.grid.color", "#0000FF");
-//			pfnSetOption(g_plt, "plot.axisY.range", "1,1e2");
-//			pfnSetOption(g_plt, "plot.axisY.scale", "linear");
+		if (g_plt) {
+			g_plt->set_option("plot.title", "Archimedean spiral");
+			g_plt->set_option("plot.background.color", "#aaaaaa");
+//			g_plt->set_option("plot.axisX.tick.visible", "true");
+//			g_plt->set_option("plot.axisX.grid.visible", "false");
+//			g_plt->set_option("plot.axisY.visible", "true");
+//			g_plt->set_option("plot.axisY.color", "#0000FF");
+//			g_plt->set_option("plot.axisY.tick.color", "#0000FF");
+//			g_plt->set_option("plot.axisY.grid.color", "#0000FF");
+//			g_plt->set_option("plot.axisY.range", "1,1e2");
+//			g_plt->set_option("plot.axisY.scale", "linear");
+			g_plt->set_option("plot.axisX.label", "Frequency");
+			g_plt->set_option("plot.axisY.label", "a.u.");
+
+			HDC hdc = GetDC(hWnd);
+			if (hdc) {
+				TEXTMETRIC tm;
+				GetTextMetrics(hdc, &tm);
+				ReleaseDC(hWnd, hdc);
+
+				char buf[64];
+				sprintf_s(buf, "%dx%d", tm.tmMaxCharWidth, tm.tmHeight);
+				g_plt->set_option("plot.font.size", buf);
+			}
 		}
 
 		break;
@@ -245,7 +240,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_TIMER: {
 		if (wParam == g_idTimer) {
-			if (g_plt && pfnCurve && pfnSetOption) {
+			if (g_plt) {
 				std::vector<float> xData;
 				std::vector<float> yData;
 
@@ -271,22 +266,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 				}
 
 				if (g_curves.empty()) {
-					void *curve = pfnCurve(g_plt, xData.data(), yData.data(), xData.size());
+					Curve *curve = new Curve(g_plt);
 					if (curve) {
 						g_curves.push_back(curve);
-						pfnSetOption(curve, "curve.color", "#0000FF");
-						pfnSetOption(curve, "curve.width", "2");
-//					    pfnSetOption(curve, "curve.style", ":");
-//					    pfnSetOption(curve, "curve.marker.shape", ".");
-//					    pfnSetOption(curve, "curve.marker.size", "8");
-//						pfnSetOption(curve, "curve.marker.color", "#FF0000");
+						curve->updateData(xData, yData);
+						curve->set_option("curve.color", "#0000FF");
+						curve->set_option("curve.width", "2");
+//					    curve->set_option("curve.style", ":");
+					    curve->set_option("curve.marker.shape", ".");
+//					    curve->set_option("curve.marker.size", "8");
+						curve->set_option("curve.marker.color", "#FF0000");
 					}
 				} else
-					pfnCurve(g_curves[0], xData.data(), yData.data(), xData.size());
+					g_curves[0]->updateData(xData, yData);
 
                 InvalidateRect(hWnd, NULL, FALSE);
 
-				KillTimer(hWnd, g_idTimer);
+				//KillTimer(hWnd, g_idTimer);
 			}
 		}
 		return 0;
@@ -309,8 +305,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             int dy = curY - g_lastMousePos.y;
 
             if (dx != 0 || dy != 0) {
-                if (g_plt && pfnPan) {
-                    pfnPan(g_plt, dx, dy);
+                if (g_plt) {
+                    g_plt->pan(dx, dy);
                 }
 
                 g_lastMousePos.x = curX;
@@ -320,12 +316,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
         }
 
-        if (g_plt && pfnPix2Math) {
+        if (g_plt) {
             float logicalX = 0.0f;
             float logicalY = 0.0f;
             float logicalY2 = 0.0f;
 
-            pfnPix2Math(g_plt, curX, curY, &logicalX, &logicalY, &logicalY2);
+            g_plt->pix2math(curX, curY, &logicalX, &logicalY, &logicalY2);
 
 #ifdef UNICODE
             wchar_t szTitle[256];
@@ -349,7 +345,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     }
 
     case WM_MOUSEWHEEL: {
-        if (g_plt && pfnZoom) {
+        if (g_plt) {
 			if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
 				short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
 
@@ -368,7 +364,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 				}
 
 				if (factor != 1.0f) {
-					pfnZoom(g_plt, ptMouse.x, ptMouse.y, factor);
+					g_plt->zoom(ptMouse.x, ptMouse.y, factor);
 					InvalidateRect(hWnd, NULL, FALSE);
 				}
 			}
@@ -377,13 +373,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     }
 
     case WM_SIZE: {
-        g_canvasWidth  = LOWORD(lParam);
-        g_canvasHeight = HIWORD(lParam);
+        g_plotWidth  = LOWORD(lParam);
+        g_plotHeight = HIWORD(lParam);
 
-		if (g_plt && pfnSetOption) {
+		if (g_plt) {
 			char buf[64];
-			sprintf_s(buf, "%dx%d", g_canvasWidth, g_canvasHeight);
-			pfnSetOption(g_plt, "plot.size", buf);
+			sprintf_s(buf, "%dx%d", g_plotWidth, g_plotHeight);
+			g_plt->set_option("plot.size", buf);
 		}
 
         InvalidateRect(hWnd, NULL, FALSE);
@@ -398,26 +394,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HDC hdcScreen = BeginPaint(hWnd, &ps);
 
         HDC hdcMem = CreateCompatibleDC(hdcScreen);
-        HBITMAP hBitmapMem = CreateCompatibleBitmap(hdcScreen, g_canvasWidth, g_canvasHeight);
+        HBITMAP hBitmapMem = CreateCompatibleBitmap(hdcScreen, g_plotWidth, g_plotHeight);
         HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBitmapMem);
 
-        RECT rect = { 0, 0, g_canvasWidth, g_canvasHeight };
+        RECT rect = { 0, 0, g_plotWidth, g_plotHeight };
         HBRUSH hBgBrush = CreateSolidBrush(RGB(255, 255, 255));
         FillRect(hdcMem, &rect, hBgBrush);
         DeleteObject(hBgBrush);
 
-		if (g_plt && pfnSetOption) {
-			TEXTMETRIC tm;
-			GetTextMetrics(hdcScreen, &tm);
-			char buf[64];
-			sprintf_s(buf, "%dx%d", tm.tmMaxCharWidth, tm.tmHeight);
-			pfnSetOption(g_plt, "plot.font.size", buf);
-		}
-        if (g_plt && pfnRender) {
+        if (g_plt) {
 			const int MAX_OUT_COMMANDS = 1024;
 			std::vector<struct plt_render_cmd> out_cmds(MAX_OUT_COMMANDS);
 
-			int actual_count = pfnRender(g_plt, out_cmds.data(), MAX_OUT_COMMANDS);
+			int actual_count = g_plt->render(out_cmds.data(), MAX_OUT_COMMANDS);
 
 			if (actual_count > 0) {
 				ExecuteDrawCommands(hdcMem, out_cmds);
@@ -426,7 +415,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             TextOutA(hdcMem, 20, 20, "DLL API not loaded!", 19);
         }
 
-        BitBlt(hdcScreen, 0, 0, g_canvasWidth, g_canvasHeight, hdcMem, 0, 0, SRCCOPY);
+        BitBlt(hdcScreen, 0, 0, g_plotWidth, g_plotHeight, hdcMem, 0, 0, SRCCOPY);
 
         SelectObject(hdcMem, hOldBitmap);
         DeleteObject(hBitmapMem);
@@ -436,8 +425,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
     case WM_DESTROY:
-		if (g_plt && pfnDestroy)
-			pfnDestroy(g_plt);
+		if (g_plt)
+			delete g_plt;
         PostQuitMessage(0);
         break;
     default:
@@ -453,18 +442,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     freopen("CONOUT$", "w", stderr);
 #endif
 
-    hPlotDll = LoadLibrary(L"debug\\libplot.dll");
-    if (hPlotDll) {
-        pfnCreate = (FuncCreate)GetProcAddress(hPlotDll, "plt_create");
-        pfnDestroy = (FuncDestroy)GetProcAddress(hPlotDll, "plt_destroy");
-        pfnCurve          = (FuncCurve)GetProcAddress(hPlotDll, "plt_curve");
-        pfnSetOption     = (FuncSetOption)GetProcAddress(hPlotDll, "plt_set_option");
-		pfnPan           = (FuncPan)GetProcAddress(hPlotDll, "plt_pan");
-		pfnZoom          = (FuncZoom)GetProcAddress(hPlotDll, "plt_zoom");
-		pfnPix2Math = (FuncPix2Math)GetProcAddress(hPlotDll, "plt_pix2math");
-		pfnRender          = (FuncRender)GetProcAddress(hPlotDll, "plt_render");
-    }
-
     const wchar_t szClassName[] = L"TestLibPlotClass";
     WNDCLASSEXW wcex = { 0 };
     wcex.cbSize = sizeof(WNDCLASSEX);
@@ -478,7 +455,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     if (!RegisterClassExW(&wcex)) return 0;
 
     HWND hWnd = CreateWindowW(szClassName, L"Libplot demo", WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, g_canvasWidth, g_canvasHeight, NULL, NULL, hInstance, NULL);
+        CW_USEDEFAULT, CW_USEDEFAULT, g_plotWidth, g_plotHeight, NULL, NULL, hInstance, NULL);
 
     if (!hWnd) return 0;
 
@@ -491,7 +468,5 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         DispatchMessage(&msg);
     }
 
-    if (hPlotDll)
-		FreeLibrary(hPlotDll);
     return (int)msg.wParam;
 }
