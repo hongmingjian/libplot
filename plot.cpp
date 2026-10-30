@@ -3,11 +3,12 @@
 #include <sstream>
 #include <iomanip>
 
-static float NiceNumber(float x, bool round)
+template<typename T>
+static T NiceNumber(T x, bool round)
 {
 	int exp = static_cast<int>(std::floor(std::log10(x)));
-	float f = x / std::pow(10.0, exp);
-	float nf;
+	T f = x / std::pow(10.0, exp);
+	T nf;
 	if (round) {
 		if (f < 1.5)
 			nf = 1.0;
@@ -30,7 +31,8 @@ static float NiceNumber(float x, bool round)
 	return nf * std::pow(10.0, exp);
 }
 
-static std::string FormatNumber(float val, int scale, std::string unit = "")
+template<typename T>
+static std::string FormatNumber(T val, int scale, std::string unit = "")
 {
     std::ostringstream oss;
 
@@ -55,7 +57,7 @@ static std::string FormatNumber(float val, int scale, std::string unit = "")
 
     static const char* prefixes[] = { "p", "u", "m", "", "k", "M", "G", "T" };
 
-    float scaled_val = val;
+    T scaled_val = val;
     int index = 3; // "" (10^0)
 
     while (std::abs(scaled_val) >= 1000.0f && index < 7) {
@@ -71,17 +73,18 @@ static std::string FormatNumber(float val, int scale, std::string unit = "")
     return oss.str();
 }
 
-void Axis::applyMargin(int ends)
+template<typename T>
+void Axis<T>::applyMargin(int ends)
 {
 	if (ratioMargin <= 0.0f)
 		return;
 	if (ends == 0)
 		return;
 
-	float d;
+	T d;
 	if (scale == SCALE_LOG) {
-		float logMin = std::log10(min);
-		float logMax = std::log10(max);
+		T logMin = std::log10(min);
+		T logMax = std::log10(max);
 		d = (logMax - logMin) * ratioMargin;
 		if (ends & END_MIN)
 			min = std::pow(10.0, logMin - d);
@@ -96,7 +99,8 @@ void Axis::applyMargin(int ends)
 	}
 }
 
-void Axis::pan(float d)
+template<typename T>
+void Axis<T>::pan(T d)
 {
 	if (!panEnabled)
 		return;
@@ -112,7 +116,8 @@ void Axis::pan(float d)
 	}
 }
 
-void Axis::zoom(float center, float factor)
+template<typename T>
+void Axis<T>::zoom(T center, float factor)
 {
 	if (!zoomEnabled)
 		return;
@@ -121,8 +126,8 @@ void Axis::zoom(float center, float factor)
 	if (max <= min || !std::isnormal(max - min))
 		return;
 
-	float newMin = min;
-	float newMax = max;
+	T newMin = min;
+	T newMax = max;
 
 	if (scale == SCALE_LOG) {
 		newMin = std::log10(newMin);
@@ -142,10 +147,10 @@ void Axis::zoom(float center, float factor)
 		return;
 
 	if (factor < 1) {
-		float magnitude = std::max(std::abs(newMin), std::abs(newMax));
+		T magnitude = std::max(std::abs(newMin), std::abs(newMax));
 		if (magnitude == 0.0f)
 			magnitude = 1.0f;
-		if ((newMax - newMin) / magnitude < 10.0f * std::numeric_limits<float>::epsilon())
+		if ((newMax - newMin) / magnitude < 10.0f * std::numeric_limits<T>::epsilon())
 			return;
 	}
 
@@ -153,9 +158,10 @@ void Axis::zoom(float center, float factor)
 	max = newMax;
 }
 
-std::vector<float> Axis::calculateTicks() const
+template<typename T>
+std::vector<T> Axis<T>::calculateTicks() const
 {
-	std::vector<float> ticks;
+	std::vector<T> ticks;
 
 	if (plot && plot->getCoord() == COORD_POLAR && this == &(plot->axisX)) {
 		float interval = tick.interval;
@@ -173,20 +179,20 @@ std::vector<float> Axis::calculateTicks() const
 	}
 
 	if (plot && this == &(plot->axisY2)) {
-		std::vector<float> leftTicks = plot->axisY.calculateTicks();
+		std::vector<T> leftTicks = plot->axisY.calculateTicks();
 
-		float leftMin = plot->axisY.min;
-		float leftMax = plot->axisY.max;
-		float leftRange = leftMax - leftMin;
+		T leftMin = plot->axisY.min;
+		T leftMax = plot->axisY.max;
+		T leftRange = leftMax - leftMin;
 
 		if (std::isnormal(leftRange)) {
 			if (scale == SCALE_LOG) {
-				float logMin2 = std::log10(min);
-				float logMax2 = std::log10(max);
-				for (float leftVal : leftTicks)
+				T logMin2 = std::log10(min);
+				T logMax2 = std::log10(max);
+				for (T leftVal : leftTicks)
 					ticks.push_back(std::pow(10.0, logMin2 + (logMax2 - logMin2) * (leftVal - leftMin) / leftRange));
 			} else {
-				for (float leftVal : leftTicks)
+				for (T leftVal : leftTicks)
 					ticks.push_back(min + (max - min) * (leftVal - leftMin) / leftRange);
 			}
 		}
@@ -207,9 +213,9 @@ std::vector<float> Axis::calculateTicks() const
 		count = 3;
 
 	if (scale == SCALE_LOG) {
-		float logMin = std::log10(min);
-		float logMax = std::log10(max);
-		float decadeRange = logMax - logMin;
+		T logMin = std::log10(min);
+		T logMax = std::log10(max);
+		T decadeRange = logMax - logMin;
 
 		if (decadeRange >= 1.0) {
 			int startExponent = (int)std::floor(logMin);
@@ -226,55 +232,56 @@ std::vector<float> Axis::calculateTicks() const
 						exponentStep = 1;
 				}
 			}
-			float displayMin = std::pow(10.0, startExponent);
-			float displayMax = std::pow(10.0, endExponent);
+			T displayMin = std::pow(10.0, startExponent);
+			T displayMax = std::pow(10.0, endExponent);
 			for (int expv = startExponent; expv <= endExponent; expv += exponentStep) {
-				float val = std::pow(10.0, expv);
+				T val = std::pow(10.0, expv);
 				if (val >= displayMin - 1e-6 && val <= displayMax + 1e-6) {
 					if (val >= min && val <= max)
-						ticks.push_back((float)val);
+						ticks.push_back(val);
 				}
 			}
 		}
 		else {
-			float niceStep;
+			T niceStep;
 			if (tick.interval > 0.0f) {
 				niceStep = tick.interval;
 			} else {
-				float baseRange = NiceNumber(max - min, false);
+				T baseRange = NiceNumber(max - min, false);
 				niceStep = NiceNumber(baseRange / (count - 1), true);
 			}
-			float displayMin = std::floor(min / niceStep) * niceStep;
-			float displayMax = std::ceil(max / niceStep) * niceStep;
-			for (float v = displayMin; v <= displayMax + (niceStep * 0.0001); v += niceStep) {
+			T displayMin = std::floor(min / niceStep) * niceStep;
+			T displayMax = std::ceil(max / niceStep) * niceStep;
+			for (T v = displayMin; v <= displayMax + (niceStep * 0.0001); v += niceStep) {
 				if (v >= min - (niceStep * 0.0001) && v <= max + (niceStep * 0.0001)) {
-					ticks.push_back((float)v);
+					ticks.push_back(v);
 				}
 			}
 		}
 		return ticks;
 	}
 
-	float niceStep;
+	T niceStep;
 	if (tick.interval > 0.0f) {
 		niceStep = tick.interval;
 	} else {
-		float range = NiceNumber(max - min, false);
+		T range = NiceNumber(max - min, false);
 		niceStep = NiceNumber(range / (count - 1), true);
 	}
 
-	float start = std::floor(min / niceStep) * niceStep;
-	float end   = std::ceil(max / niceStep) * niceStep;
-	for (float v = start; v <= end + (niceStep * 0.0001); v += niceStep) {
+	T start = std::floor(min / niceStep) * niceStep;
+	T end   = std::ceil(max / niceStep) * niceStep;
+	for (T v = start; v <= end + (niceStep * 0.0001); v += niceStep) {
 		if (v >= min - (niceStep * 0.0001) && v <= max + (niceStep * 0.0001)) {
-			ticks.push_back((float)v);
+			ticks.push_back(v);
 		}
 	}
 
 	return ticks;
 }
 
-Plot::Plot(int coord)
+template<typename T>
+Plot<T>::Plot(int coord)
 {
 	this->coord = coord;
 
@@ -297,25 +304,28 @@ Plot::Plot(int coord)
 	applyMargin();
 }
 
-Plot::~Plot()
+template<typename T>
+Plot<T>::~Plot()
 {
-	for (Curve *c : curves)
+	for (Curve<T> *c : curves)
 		delete c;
 	curves.clear();
 }
 
-Curve *Plot::addCurve(Curve *curve)
+template<typename T>
+Curve<T> *Plot<T>::addCurve(Curve<T> *curve)
 {
 	curves.push_back(curve);
 	autoRange();
 	return curve;
 }
 
-Curve *Plot::removeCurve(Curve *curve)
+template<typename T>
+Curve<T> *Plot<T>::removeCurve(Curve<T> *curve)
 {
 	auto it = std::find(curves.begin(), curves.end(), curve);
 	if (it != curves.end()) {
-		Curve *curve = *it;
+		Curve<T> *curve = *it;
 		curves.erase(it);
 		autoRange();
 		return curve;
@@ -323,7 +333,8 @@ Curve *Plot::removeCurve(Curve *curve)
 	return nullptr;
 }
 
-void Plot::applyMargin()
+template<typename T>
+void Plot<T>::applyMargin()
 {
 	if (coord == COORD_POLAR)
 		return;
@@ -333,10 +344,11 @@ void Plot::applyMargin()
 		axisY2.applyMargin();
 }
 
-void Plot::autoRange(bool force)
+template<typename T>
+void Plot<T>::autoRange(bool force)
 {
 	for (const std::string &name: {"X", "Y", "Y2"}) {
-		Axis *axis = nullptr;
+		Axis<T> *axis = nullptr;
 		if (name == "X")
 			axis = &axisX;
 		else if (name == "Y")
@@ -348,13 +360,13 @@ void Plot::autoRange(bool force)
 		if (!axis->visible)
 			continue;
 
-		std::pair<float, float> minmax{std::numeric_limits<float>::max(),
-			std::numeric_limits<float>::lowest()};
-		for (Curve *curve: curves) {
+		std::pair<T, T> minmax{std::numeric_limits<T>::max(),
+			                   std::numeric_limits<T>::lowest()};
+		for (Curve<T> *curve: curves) {
 			if (!curve->visible)
 				continue;
 
-			std::pair<float, float> minmax1;
+			std::pair<T, T> minmax1;
 			bool update = false;
 			if (name == "X") {
 				if (curve->getXData().empty())
@@ -389,17 +401,18 @@ void Plot::autoRange(bool force)
 		int ends = 0;
 		if (force || axis->min > minmax.first) {
 			axis->min = minmax.first;
-			ends |= Axis::END_MIN;
+			ends |= Axis<T>::END_MIN;
 		}
 		if (force || axis->max < minmax.second) {
 			axis->max = minmax.second;
-			ends |= Axis::END_MAX;
+			ends |= Axis<T>::END_MAX;
 		}
 		axis->applyMargin(ends);
 	}
 }
 
-float Plot::toPixelX(float mathX) const
+template<typename T>
+float Plot<T>::toPixelX(T mathX) const
 {
 	if (mathX == axisX.min)
 		return paddings.at("L");
@@ -410,18 +423,19 @@ float Plot::toPixelX(float mathX) const
 		return std::numeric_limits<float>::infinity();
 
 	if (axisX.scale == SCALE_LOG) {
-		float logX = std::log10(mathX);
-		float logMin = std::log10(axisX.min);
-		float logMax = std::log10(axisX.max);
+		T logX = std::log10(mathX);
+		T logMin = std::log10(axisX.min);
+		T logMax = std::log10(axisX.max);
 
 		return paddings.at("L") + (logX - logMin) / (logMax - logMin) * getClientWidth();
 	}
 	return paddings.at("L") + (mathX - axisX.min) / (axisX.max - axisX.min) * getClientWidth();
 }
 
-float Plot::toPixelY(float mathY, int which) const
+template<typename T>
+float Plot<T>::toPixelY(T mathY, int which) const
 {
-	const Axis& axis = (which == AXIS_SECONDARY) ? axisY2 : axisY;
+	const Axis<T>& axis = (which == AXIS_SECONDARY) ? axisY2 : axisY;
 	if (mathY == axis.min)
 		return plotHeight - paddings.at("B");
 	if (mathY == axis.max)
@@ -431,36 +445,39 @@ float Plot::toPixelY(float mathY, int which) const
 		return std::numeric_limits<float>::infinity();
 
 	if (axis.scale == SCALE_LOG) {
-		float logY = std::log10(mathY);
-		float logMin = std::log10(axis.min);
-		float logMax = std::log10(axis.max);
+		T logY = std::log10(mathY);
+		T logMin = std::log10(axis.min);
+		T logMax = std::log10(axis.max);
 		return (plotHeight - paddings.at("B")) - (logY - logMin) / (logMax - logMin) * getClientHeight();
 	}
 	return (plotHeight - paddings.at("B")) - (mathY - axis.min) / (axis.max - axis.min) * getClientHeight();
 }
 
-float Plot::toMathX(float pixelX) const
+template<typename T>
+T Plot<T>::toMathX(float pixelX) const
 {
 	if (axisX.scale == SCALE_LOG) {
-		float logMin = std::log10(axisX.min);
-		float logMax = std::log10(axisX.max);
+		T logMin = std::log10(axisX.min);
+		T logMax = std::log10(axisX.max);
 		return std::pow(10.0, logMin + (logMax - logMin) * (pixelX - paddings.at("L")) / getClientWidth());
 	}
 	return axisX.min + (axisX.max - axisX.min) * (pixelX - paddings.at("L")) / getClientWidth();
 }
 
-float Plot::toMathY(float pixelY, int which) const
+template<typename T>
+T Plot<T>::toMathY(float pixelY, int which) const
 {
-	const Axis& axis = (which == AXIS_SECONDARY) ? axisY2 : axisY;
+	const Axis<T>& axis = (which == AXIS_SECONDARY) ? axisY2 : axisY;
 	if (axis.scale == SCALE_LOG) {
-		float logMin = std::log10(axis.min);
-		float logMax = std::log10(axis.max);
+		T logMin = std::log10(axis.min);
+		T logMax = std::log10(axis.max);
 		return std::pow(10.0, logMin + (logMax - logMin) * (plotHeight - paddings.at("B") - pixelY) / getClientHeight());
 	}
 	return axis.min + (axis.max - axis.min) * (plotHeight - paddings.at("B") - pixelY) / getClientHeight();
 }
 
-std::pair<float, float> Plot::toPolarPixel(float theta, float r) const
+template<typename T>
+std::pair<float, float> Plot<T>::toPolarPixel(T theta, T r) const
 {
 	float cx = paddings.at("L") + getClientWidth() / 2.0f;
 	float cy = paddings.at("T") + getClientHeight() / 2.0f;
@@ -474,9 +491,9 @@ std::pair<float, float> Plot::toPolarPixel(float theta, float r) const
 
 	if (!std::isnormal(axisY.max - axisY.min))
 		return {std::numeric_limits<float>::infinity(),
-			std::numeric_limits<float>::infinity()};
+			    std::numeric_limits<float>::infinity()};
 
-	float rmin, rmax;
+	T rmin, rmax;
 	if (axisY.scale == SCALE_LOG) {
 		r = std::log10(r);
 		rmin = std::log10(axisY.min);
@@ -490,7 +507,8 @@ std::pair<float, float> Plot::toPolarPixel(float theta, float r) const
 	        cy - (r - rmin) / (rmax - rmin) * maxPixelR * std::sin(theta)};
 }
 
-std::pair<float, float> Plot::toPolarMath(float pixelX, float pixelY) const
+template<typename T>
+std::pair<T, T> Plot<T>::toPolarMath(float pixelX, float pixelY) const
 {
 	float cx = paddings.at("L") + getClientWidth() / 2.0f;
 	float cy = paddings.at("T") + getClientHeight() / 2.0f;
@@ -498,14 +516,14 @@ std::pair<float, float> Plot::toPolarMath(float pixelX, float pixelY) const
 
 	float dx = pixelX - cx;
 	float dy = cy - pixelY;
-	float theta = std::atan2(dy, dx);
+	T theta = std::atan2(dy, dx);
 	if (theta < 0)
 		theta += 2.0 * M_PI;
-	float r;
+	T r;
 
 	if (axisY.scale == SCALE_LOG) {
-		float logMin = std::log10(axisY.min);
-		float logMax = std::log10(axisY.max);
+		T logMin = std::log10(axisY.min);
+		T logMax = std::log10(axisY.max);
 
 		r = std::pow(10.0, logMin + (logMax - logMin) * std::sqrt(dx * dx + dy * dy) / maxPixelR);
 	} else {
@@ -515,7 +533,8 @@ std::pair<float, float> Plot::toPolarMath(float pixelX, float pixelY) const
 	return {theta, r};
 }
 
-void Plot::pix2math(int pixelX, int pixelY, float *x, float *y, float *y2) const
+template<typename T>
+void Plot<T>::pix2math(float pixelX, float pixelY, T *x, T *y, T *y2) const
 {
 	if (coord == COORD_POLAR) {
 		auto mathXY = toPolarMath(pixelX, pixelY);
@@ -529,7 +548,8 @@ void Plot::pix2math(int pixelX, int pixelY, float *x, float *y, float *y2) const
 	}
 }
 
-void Plot::pan(int pixelXDelta, int pixelYDelta)
+template<typename T>
+void Plot<T>::pan(float pixelXDelta, float pixelYDelta)
 {
 	if (pixelXDelta == 0 && pixelYDelta == 0)
 		return;
@@ -570,7 +590,8 @@ void Plot::pan(int pixelXDelta, int pixelYDelta)
 	}
 }
 
-void Plot::zoom(int pixelX, int pixelY, float factor)
+template<typename T>
+void Plot<T>::zoom(float pixelX, float pixelY, float factor)
 {
 	axisX.zoom(toMathX(pixelX), factor);
 	if (coord == COORD_POLAR)
@@ -581,8 +602,8 @@ void Plot::zoom(int pixelX, int pixelY, float factor)
 		axisY2.zoom(toMathY(pixelY, AXIS_SECONDARY), factor);
 }
 
-
-int Plot::set_option(const std::string& option, const std::string& value)
+template<typename T>
+int Plot<T>::set_option(const std::string& option, const std::string& value)
 {
 	if (option == "plot.size") {
 		int w, h;
@@ -603,7 +624,7 @@ int Plot::set_option(const std::string& option, const std::string& value)
 			return 0;
 		}
 	} else if (std::regex_match(option, std::regex(R"(^plot\.axis(X|Y|Y2)\..+$)"))) {
-		Axis *axis = nullptr;
+		Axis<T> *axis = nullptr;
 		std::smatch matches;
 		if (std::regex_match(option, matches, std::regex(R"(^plot\.axis(X|Y|Y2)\.(.+)$)"))) {
 			if (matches[1] == "X")
@@ -641,8 +662,14 @@ int Plot::set_option(const std::string& option, const std::string& value)
 					}
 				} else if (suffix == "range") {
 					if (!(coord == COORD_POLAR && axis == &axisX)) {
-						float a, b;
-						if (std::sscanf(value.c_str(), "%f , %f", &a, &b) == 2) {
+						T a, b;
+						std::string fmt;
+						if constexpr (std::is_same_v<T, float>) {
+							fmt = "%f , %f";
+						} else if constexpr (std::is_same_v<T, double>) {
+							fmt = "%lf , %lf";
+						}
+						if (std::sscanf(value.c_str(), fmt.c_str(), &a, &b) == 2) {
 							axis->min = a;
 							axis->max = b;
 						}
@@ -729,7 +756,8 @@ inline struct plt_render_cmd plt_render_cmd_(
     return cmd;
 }
 
-int Plot::render(struct plt_render_cmd *out, size_t nout) const
+template<typename T>
+int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 {
 	std::vector<struct plt_render_cmd> cmds;
 
@@ -748,7 +776,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.color));
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.style));
 		cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisX.tick.color));
-		for (float theta : axisX.calculateTicks()) {
+		for (T theta : axisX.calculateTicks()) {
 			if (theta <= axisX.min)
 				continue;
 			std::pair<float, float> outer_edge = toPolarPixel(theta, axisY.max);
@@ -760,8 +788,8 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 
 			if (axisX.tick.visible) {
 				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 10, outer_edge.first, outer_edge.second, 0,
-							((abs(theta-M_PI_2)<std::numeric_limits<float>::epsilon()||abs(theta-3*M_PI_2)<std::numeric_limits<float>::epsilon())?ALIGN_HCENTER:((theta>M_PI_2&&theta<3*M_PI_2)?ALIGN_RIGHT:ALIGN_LEFT)) |
-							((abs(theta)<std::numeric_limits<float>::epsilon()||abs(theta-M_PI)<std::numeric_limits<float>::epsilon())?ALIGN_VCENTER:((theta>M_PI)?ALIGN_TOP:ALIGN_BOTTOM)),
+							((abs(theta-M_PI_2)<std::numeric_limits<T>::epsilon()||abs(theta-3*M_PI_2)<std::numeric_limits<T>::epsilon())?ALIGN_HCENTER:((theta>M_PI_2&&theta<3*M_PI_2)?ALIGN_RIGHT:ALIGN_LEFT)) |
+							((abs(theta)<std::numeric_limits<T>::epsilon()||abs(theta-M_PI)<std::numeric_limits<T>::epsilon())?ALIGN_VCENTER:((theta>M_PI)?ALIGN_TOP:ALIGN_BOTTOM)),
 							FormatNumber(180 * theta / M_PI, SCALE_LINEAR)));
 			}
 		}
@@ -769,7 +797,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.color));
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.style));
 		cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisY.tick.color));
-		for (float r : axisY.calculateTicks()) {
+		for (T r : axisY.calculateTicks()) {
 			if (r <= axisY.min)
 				continue;
 			std::pair<float, float> edge = toPolarPixel(0.0, r);
@@ -836,7 +864,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.color));
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.style));
 		cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisX.tick.color));
-		for (float x : axisX.calculateTicks()) {
+		for (T x : axisX.calculateTicks()) {
 			float px = toPixelX(x);
 
 			if (axisX.grid.visible) {
@@ -852,7 +880,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.color));
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisY.grid.style));
 		cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisY.tick.color));
-		for (float y : axisY.calculateTicks()) {
+		for (T y : axisY.calculateTicks()) {
 			float py = toPixelY(y);
 
 			if (axisY.grid.visible || (axisY2.visible && axisY2.grid.visible)) {
@@ -869,7 +897,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 		}
 
 		if (axisY2.visible) {
-			for (float y2 : axisY2.calculateTicks()) {
+			for (T y2 : axisY2.calculateTicks()) {
 				float py = toPixelY(y2, AXIS_SECONDARY);
 				if (axisY.tick.visible) {
 					cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisY2.tick.color));
@@ -939,8 +967,8 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 	}
 
 	for (const auto* curve : curves) {
-		const std::vector<float> &xData = curve->getXData();
-		const std::vector<float> &yData = curve->getYData();
+		const std::vector<T> &xData = curve->getXData();
+		const std::vector<T> &yData = curve->getYData();
 
 		if (!curve || xData.empty() || yData.empty())
 			continue;
@@ -960,7 +988,7 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 				continue;
 			}
 
-			if (const Axis& a = (curve->axisY == AXIS_SECONDARY) ? axisY2 : axisY;
+			if (const Axis<T>& a = (curve->axisY == AXIS_SECONDARY) ? axisY2 : axisY;
 					yData[i] < a.min || yData[i] > a.max) {
 				firstPoint = true;
 				continue;
@@ -1039,7 +1067,8 @@ int Plot::render(struct plt_render_cmd *out, size_t nout) const
 	return nret;
 }
 
-void Curve::updateData(const std::vector<float> &x, const std::vector<float> &y)
+template<typename T>
+void Curve<T>::updateData(const std::vector<T> &x, const std::vector<T> &y)
 {
 	xData.assign(x.begin(), x.end());
 	yData.assign(y.begin(), y.end());
@@ -1058,7 +1087,8 @@ void Curve::updateData(const std::vector<float> &x, const std::vector<float> &y)
 	plot->autoRange();
 }
 
-void Curve::appendData(const std::vector<float> &x, const std::vector<float> &y)
+template<typename T>
+void Curve<T>::appendData(const std::vector<T> &x, const std::vector<T> &y)
 {
 	xData.insert(xData.end(), x.begin(), x.end());
 	yData.insert(yData.end(), y.begin(), y.end());
@@ -1070,9 +1100,9 @@ void Curve::appendData(const std::vector<float> &x, const std::vector<float> &y)
 		if (xmax < *max_it)
 			xmax = *max_it;
 
-		Axis *axis = &plot->axisX;
+		Axis<T> *axis = &plot->axisX;
 		if (axis->autoscroll) {
-			float delta = 0;
+			T delta = 0;
 
 			if (xmax > axis->max)
 				delta = (xmax - axis->max) + (axis->max - axis->min) / 2;
@@ -1089,13 +1119,13 @@ void Curve::appendData(const std::vector<float> &x, const std::vector<float> &y)
 		if (ymax < *max_it)
 			ymax = *max_it;
 
-		Axis *axis = nullptr;
+		Axis<T> *axis = nullptr;
 		if (axisY == AXIS_PRIMARY)
 			axis = &plot->axisY;
 		else
 			axis = &plot->axisY2;
 		if (axis->autoscroll) {
-			float delta = 0;
+			T delta = 0;
 
 			if (ymax > axis->max)
 				delta = (ymax - axis->max) + (axis->max - axis->min) / 2;
@@ -1107,7 +1137,8 @@ void Curve::appendData(const std::vector<float> &x, const std::vector<float> &y)
 	}
 }
 
-int Curve::set_option(const std::string& option, const std::string& value)
+template<typename T>
+int Curve<T>::set_option(const std::string& option, const std::string& value)
 {
 	if (option == "curve.visible") {
 		if (value == "true")
@@ -1138,4 +1169,12 @@ int Curve::set_option(const std::string& option, const std::string& value)
 
 	return 0;
 }
+
+template class Axis<float>;
+template class Plot<float>;
+template class Curve<float>;
+
+template class Axis<double>;
+template class Plot<double>;
+template class Curve<double>;
 

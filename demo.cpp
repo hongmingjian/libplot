@@ -16,8 +16,8 @@
 
 int g_plotWidth  = 550;
 int g_plotHeight = 450;
-Plot *g_plt = nullptr;
-std::vector<Curve *> g_curves;
+Plot<float> *g_plt = nullptr;
+std::vector<Curve<float> *> g_curves;
 int g_coord = COORD_POLAR;//CARTESIAN;
 int g_idTimer = 1001;
 static bool g_isPanning = false;
@@ -207,7 +207,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_CREATE: {
 		SetTimer(hWnd, g_idTimer, 1000, NULL);
 
-		g_plt = new Plot(g_coord);
+		g_plt = new Plot<float>(g_coord);
 
 		if (g_plt) {
 			g_plt->set_option("plot.title", "Archimedean spiral");
@@ -266,7 +266,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 				}
 
 				if (g_curves.empty()) {
-					Curve *curve = new Curve(g_plt);
+					Curve<float> *curve = new Curve<float>(g_plt);
 					if (curve) {
 						g_curves.push_back(curve);
 						curve->updateData(xData, yData);

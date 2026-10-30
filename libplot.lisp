@@ -75,16 +75,16 @@
 
 (fli:define-foreign-function (plt-pan "plt_pan")
     ((plt :pointer)
-     (dx :int)
-     (dy :int))
+     (dx :float)
+     (dy :float))
   :result-type :void
   :module "libplot"
   )
 
 (fli:define-foreign-function (plt-zoom "plt_zoom")
     ((plt :pointer)
-     (cx :int)
-     (cy :int)
+     (cx :float)
+     (cy :float)
      (factor :float))
   :result-type :void
   :module "libplot"
@@ -92,8 +92,8 @@
 
 (fli:define-foreign-function (plt-pix2math "plt_pix2math")
     ((plt :pointer)
-     (px :int)
-     (py :int)
+     (px :float)
+     (py :float)
      (x (:reference-return :float))
      (y (:reference-return :float))
      (y2 (:reference-return :float)))
@@ -474,7 +474,7 @@
   (let* ((interface (capi:element-interface pane))
          (plot (window-plt-handle interface)))
     (multiple-value-bind (lx ly ly2)
-      (plt-pix2math plot x y t t t)
+      (plt-pix2math plot (float x) (float y) t t t)
       (setf (capi:interface-title interface)
             (format nil "Libplot demo: (~A, ~A) -> (~A, ~A, ~A)" x y lx ly ly2)))
     ))
@@ -498,13 +498,13 @@
 (defun on-pan (pane x y dx dy)
   (let* ((interface (capi:element-interface pane))
          (plot (window-plt-handle interface)))
-    (plt-pan plot dx dy)
+    (plt-pan plot (float dx) (float dy))
     (gp:invalidate-rectangle pane)))
 
 (defun on-zoom (pane x y factor)
   (let* ((interface (capi:element-interface pane))
          (plot (window-plt-handle interface)))
-    (plt-zoom plot x y factor)
+    (plt-zoom plot (float x) (float y) factor)
     (gp:invalidate-rectangle pane)))
 
 (defun demo (&optional (coord +coord-cartesian+))

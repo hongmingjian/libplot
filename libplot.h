@@ -1,18 +1,24 @@
 #ifndef LIBPLOT_H
 #define LIBPLOT_H
 
+/**
+ * NOTE: Change here to use float or double
+ */
+typedef float real;
+//typedef double real;
+
 #ifndef LIBPLOT_EXPORTS
 void *plt_create(int coord);
 void plt_destroy(void *plt);
 
 int plt_set_option(void *handle, const char *option, const char *value);
 
-void plt_pan(void *plt, int dx, int dy);
-void plt_zoom(void *plt, int cx, int cy, float factor);
-void plt_pix2math(void *plt, int px, int py, float *x, float *y, float *y2);
+void plt_pan(void *plt, real dx, real dy);
+void plt_zoom(void *plt, real cx, real cy, float factor);
+void plt_pix2math(void *plt, float px, float py, real *x, real *y, real *y2);
 
-void *plt_curve(void *handle, const float *x, const float *y, int count);
-void plt_append(void *crv, const float *x, const float *y, int count);
+void *plt_curve(void *handle, const real *x, const real *y, int count);
+void plt_append(void *crv, const real *x, const real *y, int count);
 void plt_remove(void *crv);
 
 int plt_render(void *plt, struct plt_render_cmd *out, int nout);

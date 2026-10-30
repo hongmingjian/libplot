@@ -12,7 +12,9 @@
 
 #include "libplot.h"
 
+template <typename T>
 class Plot;
+template <typename T>
 class Curve;
 
 struct Tick {
@@ -27,15 +29,18 @@ struct Grid {
     std::string style = ":";
 };
 
+template <typename T>
 struct Axis {
-	Plot *plot = nullptr;
+	static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>, "Error: Must be float or double!");
+
+	Plot<T> *plot = nullptr;
 
     int scale = SCALE_LINEAR;
-    float min = 0.0f;
-    float max = 100.0f;
-	float ratioMargin = 0.08f;
+    T min = 0.0f;
+    T max = 100.0f;
+	T ratioMargin = 0.08f;
 
-	float width = 1.0f;
+	float width = 1.0f; // line width
     bool visible = true;
     bool panEnabled = true;
     bool zoomEnabled = true;
@@ -53,15 +58,17 @@ struct Axis {
 	static constexpr int END_MIN = 0x1;
 	static constexpr int END_MAX = 0x2;
 	void applyMargin(int ends = END_MIN|END_MAX);
-    void pan(float d);
-	void zoom(float center, float factor);
-	std::vector<float> calculateTicks() const;
+    void pan(T d);
+	void zoom(T center, float factor);
+	std::vector<T> calculateTicks() const;
 };
 
+template <typename T>
 class Plot {
+	static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>, "Error: Must be float or double!");
 private:
-	friend class Axis;
-	friend class Curve;
+	friend class Axis<T>;
+	friend class Curve<T>;
 
 	int coord = COORD_CARTESIAN;
 
@@ -75,18 +82,18 @@ private:
 	std::string title = "";
     std::string backgroundColor = ""; // empty for transparent
 
-	std::vector<Curve *> curves;
-	Curve *addCurve(Curve *curve);
-	Curve *removeCurve(Curve *curve);
+	std::vector<Curve<T> *> curves;
+	Curve<T> *addCurve(Curve<T> *curve);
+	Curve<T> *removeCurve(Curve<T> *curve);
 
     void applyMargin();
 	void autoRange(bool force = true);
     float getClientWidth() const { return plotWidth - paddings.at("L") - paddings.at("R"); }
     float getClientHeight() const { return plotHeight - paddings.at("T") - paddings.at("B"); }
 public:
-	Axis axisX;   // as theta in Polar
-	Axis axisY;   // primary (left) Y, as r in Polar
-	Axis axisY2;  // secondary (right) Y
+	Axis<T> axisX;   // as theta in Polar
+	Axis<T> axisY;   // primary (left) Y, as r in Polar
+	Axis<T> axisY2;  // secondary (right) Y
 	int activeY = AXIS_PRIMARY;
 
     Plot(int coord = COORD_CARTESIAN);
@@ -94,21 +101,24 @@ public:
 
 	int getCoord() const { return coord; }
 
-    float toPixelX(float mathX) const;
-    float toPixelY(float mathY, int which = AXIS_PRIMARY) const;
-    float toMathX(float pixelX) const;
-    float toMathY(float pixelY, int which = AXIS_PRIMARY) const;
-    std::pair<float, float> toPolarPixel(float theta, float r) const;
-    std::pair<float, float> toPolarMath(float pixelX, float pixelY) const;
-	void pix2math(int pixelX, int pixelY, float *x, float *y, float *y2) const;
-    void pan(int pixelXDelta, int pixelYDelta);
-    void zoom(int pixelX, int pixelY, float factor);
+    float toPixelX(T mathX) const;
+    float toPixelY(T mathY, int which = AXIS_PRIMARY) const;
+    T toMathX(float pixelX) const;
+    T toMathY(float pixelY, int which = AXIS_PRIMARY) const;
+    std::pair<float, float> toPolarPixel(T theta, T r) const;
+    std::pair<T, T> toPolarMath(float pixelX, float pixelY) const;
+	void pix2math(float pixelX, float pixelY, T *x, T *y, T *y2) const;
+    void pan(float pixelXDelta, float pixelYDelta);
+    void zoom(float pixelX, float pixelY, float factor);
     int set_option(const std::string& option, const std::string& value);
 	int render(struct plt_render_cmd *out, size_t nout) const;
 };
 
+template <typename T>
 struct Curve {
-	Plot *plot = nullptr;
+	static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>, "Error: Must be float or double!");
+
+	Plot<T> *plot = nullptr;
 	int axisY = AXIS_PRIMARY;
 
 	bool visible = true;
@@ -121,7 +131,7 @@ struct Curve {
 	float markerSize = 6.0f; // pixels
 	std::string markerColor = "#000000";
 
-    Curve(Plot *plot) {
+    Curve(Plot<T> *plot) {
 		this->plot = plot;
 		axisY = plot->activeY;
 
@@ -130,21 +140,21 @@ struct Curve {
     ~Curve() {
 		plot->removeCurve(this);
 	}
-	const std::vector<float> &getXData() const { return xData; }
-	const std::vector<float> &getYData() const { return yData; }
-	std::pair<float, float> getXMinMax() const { return {xmin, xmax}; }
-	std::pair<float, float> getYMinMax() const { return {ymin, ymax}; }
+	const std::vector<T> &getXData() const { return xData; }
+	const std::vector<T> &getYData() const { return yData; }
+	std::pair<T, T> getXMinMax() const { return {xmin, xmax}; }
+	std::pair<T, T> getYMinMax() const { return {ymin, ymax}; }
 
-	void updateData(const std::vector<float> &x, const std::vector<float> &y);
-	void appendData(const std::vector<float> &x, const std::vector<float> &y);
+	void updateData(const std::vector<T> &x, const std::vector<T> &y);
+	void appendData(const std::vector<T> &x, const std::vector<T> &y);
     int set_option(const std::string& option, const std::string& value);
 
 private:
-    std::vector<float> xData;
-    std::vector<float> yData;
+    std::vector<T> xData;
+    std::vector<T> yData;
 
 	// cache
-	float xmin, xmax, ymin, ymax;
+	T xmin, xmax, ymin, ymax;
 };
 
 #endif // PLOT_HPP
