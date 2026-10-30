@@ -335,7 +335,7 @@ void Plot::applyMargin()
 
 void Plot::autoRange(bool force)
 {
-	for (auto name: {"X", "Y", "Y2"}) {
+	for (const std::string &name: {"X", "Y", "Y2"}) {
 		Axis *axis = nullptr;
 		if (name == "X")
 			axis = &axisX;
