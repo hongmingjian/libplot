@@ -833,6 +833,11 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 			cmds.push_back(plt_render_cmd_(OP_MOVETO, 50, max_edge.first, max_edge.second, 0.0f, 0.0f, ""));
 			cmds.push_back(plt_render_cmd_(OP_LINETO, 50, max_edge2.first, max_edge2.second, 0.0f, 0.0f, ""));
 
+			if (!axisY.label.empty()) {
+				cmds.push_back(plt_render_cmd_(OP_SET_TEXT_COLOR, 50, 0.0f, 0.0f, 0.0f, 0.0f, axisY.color));
+				cmds.push_back(plt_render_cmd_(OP_DRAW_TEXT, 50, max_edge.first+fontWidth, max_edge.second, 0, ALIGN_LEFT | ALIGN_VCENTER, axisY.label));
+			}
+
 			max_edge = toPolarPixel(M_PI_2, axisY.max);
 			max_edge2 = toPolarPixel(3 * M_PI_2, axisY.max);
 			cmds.push_back(plt_render_cmd_(OP_MOVETO, 50, max_edge.first, max_edge.second, 0.0f, 0.0f, ""));
