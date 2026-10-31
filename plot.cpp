@@ -1063,8 +1063,11 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 		}
 	}
 
-	printf("Num. of cmds: %d\n", cmds.size());
-	fflush(stdout);
+	if (nout < cmds.size()) {
+		printf("Warning: Insufficient plt_render_cmd slots for output: %d < %d\n", nout, cmds.size());
+		fflush(stdout);
+	}
+
 	int nret = std::min(cmds.size(), nout);
 	for (int i = 0; i < nret; i++) {
 		out[i] = cmds.data()[i];
