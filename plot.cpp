@@ -483,7 +483,7 @@ std::pair<float, float> Plot<T>::toPolarPixel(T theta, T r) const
 	float cy = paddings.at("T") + getClientHeight() / 2.0f;
 	float maxPixelR = std::min(getClientWidth(), getClientHeight()) / 2.0f;
 
-	if (r == 0.0f || r == axisY.min)
+	if (r == 0.0f || r <= axisY.min)
 		return {cx, cy};
 	if (r == axisY.max)
 		return {cx + maxPixelR * std::cos(theta),
