@@ -325,7 +325,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
 #ifdef UNICODE
             wchar_t szTitle[256];
-            swprintf_s(szTitle, L"Libplot demo: (%d, %d) -> (%.g, %g, %g)", curX, curY, logicalX, logicalY, logicalY2);
+            swprintf_s(szTitle, L"Libplot demo: (%d, %d) -> (%g, %g, %g)", curX, curY, logicalX, logicalY, logicalY2);
             SetWindowTextW(hWnd, szTitle);
 #else
             char szTitle[256];
