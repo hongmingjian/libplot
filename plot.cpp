@@ -747,6 +747,36 @@ int Plot<T>::set_option(const std::string& option, const std::string& value)
 	return -1;
 }
 
+template <typename T>
+using Point = std::pair<T, T>; // first: x, second: y
+
+template <typename T>
+using Rect = std::pair<Point<T>, Point<T>>; // first: (left, top), second: (right, bottom)
+
+template <typename T>
+inline T crossProduct(const Point<T>& p0, const Point<T>& p1, const Point<T>& p2)
+{
+    return (p1.first - p0.first) * (p2.second - p0.second) - (p1.second - p0.second) * (p2.first - p0.first);
+}
+
+template <typename T>
+inline bool checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Point<T>& p3, const Point<T>& p4)
+{
+    if (std::max(p1.first, p2.first) < std::min(p3.first, p4.first) ||
+        std::max(p3.first, p4.first) < std::min(p1.first, p2.first) ||
+        std::max(p1.second, p2.second) < std::min(p3.second, p4.second) ||
+        std::max(p3.second, p4.second) < std::min(p1.second, p2.second)) {
+        return false;
+    }
+
+    T cp1 = crossProduct(p1, p2, p3);
+    T cp2 = crossProduct(p1, p2, p4);
+    T cp3 = crossProduct(p3, p4, p1);
+    T cp4 = crossProduct(p3, p4, p2);
+
+    return (cp1 * cp2 <= 0) && (cp3 * cp4 <= 0);
+}
+
 inline struct plt_render_cmd plt_render_cmd_(
 		unsigned int op, unsigned int zIndex,
 		float x, float y, float arg1, float arg2, const std::string& arg3)
@@ -759,6 +789,7 @@ inline struct plt_render_cmd plt_render_cmd_(
 template<typename T>
 int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 {
+	Rect<float> rect;
 	std::vector<struct plt_render_cmd> cmds;
 
 	if (coord == COORD_POLAR) {
@@ -858,6 +889,7 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 		float pxMax = toPixelX(axisX.max);
 		float pyMin = toPixelY(axisY.max);//!
 		float pyMax = toPixelY(axisY.min);//!
+		rect = {{pxMin, pyMin}, {pxMax, pyMax}};
 
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 5, 0.0f, 0.0f, 0.0f, 0.0f, ""));
 		cmds.push_back(plt_render_cmd_(OP_DRAW_RECT, 5, pxMin, pyMin, pxMax-pxMin, pyMax-pyMin, backgroundColor));
@@ -986,21 +1018,37 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 20, 0.0f, 0.0f, 0.0f, 0.0f, curve->color));
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 20, 0.0f, 0.0f, 0.0f, 0.0f, curve->style));
 
-		bool firstPoint = true;
-		for (size_t i = 0; i < std::min(xData.size(), yData.size()); ++i) {
-			if (xData[i] < axisX.min || xData[i] > axisX.max) {
-				firstPoint = true;
-				continue;
-			}
+		const Axis<T>& axisY_ = (curve->axisY == AXIS_SECONDARY) ? axisY2 : axisY;
 
-			if (const Axis<T>& a = (curve->axisY == AXIS_SECONDARY) ? axisY2 : axisY;
-					yData[i] < a.min || yData[i] > a.max) {
-				firstPoint = true;
-				continue;
-			}
+		float px;
+		float py;
 
-			float px;
-			float py;
+		bool prevflag = false;
+		bool currflag = false;
+		if (coord == COORD_CARTESIAN) {
+			px = toPixelX(xData[0]);
+			py = toPixelY(yData[0], curve->axisY);
+			if (xData[0] >= axisX.min && xData[0] < axisX.max &&
+				yData[0] >= axisY_.min && yData[0] < axisY_.max) {
+				if (curve->markerShape != "")
+					pxpy.push_back({px, py});
+				prevflag = true;
+			}
+		} else if (coord == COORD_POLAR) {
+			auto tmp = toPolarPixel(xData[0], yData[0]);
+			px = tmp.first;
+			py = tmp.second;
+			if (yData[0] >= axisY.min && yData[0] < axisY.max) {
+				if (curve->markerShape != "")
+					pxpy.push_back(tmp);
+				prevflag = true;
+			}
+		}
+
+		std::pair<float, float> prevPt{px, py}, currPt;
+
+		bool updated = false;
+		for (size_t i = 1; i < std::min(xData.size(), yData.size()); ++i) {
 			if (coord == COORD_CARTESIAN) {
 				px = toPixelX(xData[i]);
 				py = toPixelY(yData[i], curve->axisY);
@@ -1009,16 +1057,46 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 				px = p.first;
 				py = p.second;
 			}
+			currPt = {px, py};
 
-			if (curve->markerShape != "")
-				pxpy.push_back({px, py});
-
-			if (firstPoint) {
-				cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, px, py, 0.0f, 0.0f, ""));
-				firstPoint = false;
-			} else {
-				cmds.push_back(plt_render_cmd_(OP_LINETO, 20, px, py, 0.0f, 0.0f, ""));
+			if (coord == COORD_CARTESIAN) {
+				if (xData[i] >= axisX.min && xData[i] < axisX.max &&
+					yData[i] >= axisY_.min && yData[i] < axisY_.max) {
+					currflag = true;
+					if (curve->markerShape != "")
+						pxpy.push_back({px, py});
+				}
+			} else if (coord == COORD_POLAR) {
+				if (yData[i] >= axisY.min && yData[i] < axisY.max) {
+					currflag = true;
+					if (curve->markerShape != "")
+						pxpy.push_back({px, py});
+				}
 			}
+
+			if (prevflag || currflag ||
+				(coord == COORD_CARTESIAN && (checkSegmentIntersect<T>(prevPt, currPt,
+																	   {rect.first.first, rect.first.second},
+																	   {rect.second.first, rect.first.second}) ||
+											  checkSegmentIntersect<T>(prevPt, currPt,
+												                       {rect.second.first, rect.first.second},
+																	   {rect.second.first, rect.second.second}) ||
+											  checkSegmentIntersect<T>(prevPt, currPt,
+												                       {rect.second.first, rect.second.second},
+																	   {rect.first.first, rect.second.second}) ||
+											  checkSegmentIntersect<T>(prevPt, currPt,
+												                       {rect.first.first, rect.second.second},
+																	   {rect.first.first, rect.first.second}))) ||
+				(coord == COORD_POLAR && (true/*TODO*/))) {
+				if (!updated)
+					cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, prevPt.first, prevPt.second, 0.0f, 0.0f, ""));
+				cmds.push_back(plt_render_cmd_(OP_LINETO, 20, px, py, 0.0f, 0.0f, ""));
+				updated = true;
+			} else
+				updated = false;
+
+			prevflag = currflag; currflag = false;
+			prevPt = currPt;
 		}
 
 		if (!pxpy.empty()) {
