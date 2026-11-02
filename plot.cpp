@@ -754,9 +754,27 @@ template <typename T>
 using Rect = std::pair<Point<T>, Point<T>>; // first: (left, top), second: (right, bottom)
 
 template <typename T>
+using Circle = std::pair<Point<T>, T>; // first: center, second: radius
+
+template <typename T>
 inline T crossProduct(const Point<T>& p0, const Point<T>& p1, const Point<T>& p2)
 {
     return (p1.first - p0.first) * (p2.second - p0.second) - (p1.second - p0.second) * (p2.first - p0.first);
+}
+
+template <typename T>
+inline bool checkPointInside(const Point<T> &p, const Rect<T> &rect)
+{
+	return p.first >= rect.first.first && p.first < rect.second.first &&
+		   p.second >= rect.first.second && p.second < rect.second.second;
+}
+
+template <typename T>
+inline bool checkPointInside(const Point<T> &p, const Circle<T> &circle)
+{
+	T dx = p.first - circle.first.first;
+	T dy = p.second - circle.first.second;
+	return (dx * dx + dy * dy) < (circle.second * circle.second);
 }
 
 template <typename T>
@@ -777,6 +795,57 @@ inline bool checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const 
     return (cp1 * cp2 <= 0) && (cp3 * cp4 <= 0);
 }
 
+/**
+ * Both p1 and p2 must be outside the rect!
+ */
+template <typename T>
+bool checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Rect<T>& rect)
+{
+	return checkSegmentIntersect<T>(p1, p2,
+			                        {rect.first.first, rect.first.second},
+			                        {rect.second.first, rect.first.second}) ||
+		   checkSegmentIntersect<T>(p1, p2,
+					                {rect.second.first, rect.first.second},
+					                {rect.second.first, rect.second.second}) ||
+		   checkSegmentIntersect<T>(p1, p2,
+					                {rect.second.first, rect.second.second},
+					                {rect.first.first, rect.second.second}) ||
+		   checkSegmentIntersect<T>(p1, p2,
+				                    {rect.first.first, rect.second.second},
+				                    {rect.first.first, rect.first.second});
+}
+
+/**
+ * Both p1 and p2 must be outside the circle!
+ */
+template <typename T>
+bool checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Circle<T> &circle)
+{
+    T vx = p2.first - p1.first;
+    T vy = p2.second - p1.second;
+    T wx = circle.first.first - p1.first;
+    T wy = circle.first.second - p1.second;
+
+    T segment_len_sq = vx * vx + vy * vy;
+
+    if (segment_len_sq == 0)
+        return false;
+
+    T t = (wx * vx + wy * vy) / segment_len_sq;
+
+    if (t < 0.0 || t > 1.0)
+        return false;
+
+    std::pair<T, T> closest = {
+        p1.first + t * vx,
+        p1.second + t * vy
+    };
+
+    T dx = closest.first - circle.first.first;
+    T dy = closest.second - circle.first.second;
+    return (dx * dx + dy * dy) < (circle.second * circle.second);
+}
+
 inline struct plt_render_cmd plt_render_cmd_(
 		unsigned int op, unsigned int zIndex,
 		float x, float y, float arg1, float arg2, const std::string& arg3)
@@ -790,6 +859,7 @@ template<typename T>
 int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 {
 	Rect<float> rect;
+	Circle<float> circle;
 	std::vector<struct plt_render_cmd> cmds;
 
 	if (coord == COORD_POLAR) {
@@ -797,6 +867,9 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 
 		std::pair<float, float> max_edge = toPolarPixel(0.0, axisY.max);
 		float max_pixel_r = std::abs(max_edge.first - cx);
+
+		circle = {{cx, cy}, max_pixel_r};
+
 		if (max_pixel_r > 0) {
 			cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 5, 0.0f, 0.0f, 0.0f, 0.0f, ""));
 			cmds.push_back(plt_render_cmd_(OP_DRAW_ELLIPSE, 5, cx, cy, max_pixel_r, max_pixel_r, backgroundColor));
@@ -1012,98 +1085,72 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 		if (!curve->visible)
 			continue;
 
-		std::vector<std::pair<float, float>> pxpy;
-
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_WIDTH, 20, 0.0f, 0.0f, curve->width, 0.0f, ""));
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 20, 0.0f, 0.0f, 0.0f, 0.0f, curve->color));
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 20, 0.0f, 0.0f, 0.0f, 0.0f, curve->style));
 
-		const Axis<T>& axisY_ = (curve->axisY == AXIS_SECONDARY) ? axisY2 : axisY;
+		Point<float> prevPt, currPt;
+		std::vector<Point<float>> markers;
+		bool prevInside = false, currInside = false;
 
-		float px;
-		float py;
-
-		bool prevflag = false;
-		bool currflag = false;
 		if (coord == COORD_CARTESIAN) {
-			px = toPixelX(xData[0]);
-			py = toPixelY(yData[0], curve->axisY);
-			if (xData[0] >= axisX.min && xData[0] < axisX.max &&
-				yData[0] >= axisY_.min && yData[0] < axisY_.max) {
+			prevPt = {toPixelX(xData[0]), toPixelY(yData[0], curve->axisY)};
+			if (checkPointInside (prevPt, rect)) {
 				if (curve->markerShape != "")
-					pxpy.push_back({px, py});
-				prevflag = true;
+					markers.push_back(prevPt);
+				prevInside = true;
 			}
 		} else if (coord == COORD_POLAR) {
-			auto tmp = toPolarPixel(xData[0], yData[0]);
-			px = tmp.first;
-			py = tmp.second;
-			if (yData[0] >= axisY.min && yData[0] < axisY.max) {
+			prevPt = toPolarPixel(xData[0], yData[0]);
+			if (checkPointInside (prevPt, circle)) {
 				if (curve->markerShape != "")
-					pxpy.push_back(tmp);
-				prevflag = true;
+					markers.push_back(prevPt);
+				prevInside = true;
 			}
 		}
-
-		std::pair<float, float> prevPt{px, py}, currPt;
 
 		bool updated = false;
 		for (size_t i = 1; i < std::min(xData.size(), yData.size()); ++i) {
 			if (coord == COORD_CARTESIAN) {
-				px = toPixelX(xData[i]);
-				py = toPixelY(yData[i], curve->axisY);
+				currPt = {toPixelX(xData[i]), toPixelY(yData[i], curve->axisY)};
 			} else if (coord == COORD_POLAR) {
-				auto p = toPolarPixel(xData[i], yData[i]);
-				px = p.first;
-				py = p.second;
+				currPt = toPolarPixel(xData[i], yData[i]);
 			}
-			currPt = {px, py};
 
 			if (coord == COORD_CARTESIAN) {
-				if (xData[i] >= axisX.min && xData[i] < axisX.max &&
-					yData[i] >= axisY_.min && yData[i] < axisY_.max) {
-					currflag = true;
+				if (checkPointInside (currPt, rect)) {
+					currInside = true;
 					if (curve->markerShape != "")
-						pxpy.push_back({px, py});
+						markers.push_back(currPt);
 				}
 			} else if (coord == COORD_POLAR) {
-				if (yData[i] >= axisY.min && yData[i] < axisY.max) {
-					currflag = true;
+				if (checkPointInside (currPt, circle)) {
+					currInside = true;
 					if (curve->markerShape != "")
-						pxpy.push_back({px, py});
+						markers.push_back(currPt);
 				}
 			}
 
-			if (prevflag || currflag ||
-				(coord == COORD_CARTESIAN && (checkSegmentIntersect<T>(prevPt, currPt,
-																	   {rect.first.first, rect.first.second},
-																	   {rect.second.first, rect.first.second}) ||
-											  checkSegmentIntersect<T>(prevPt, currPt,
-												                       {rect.second.first, rect.first.second},
-																	   {rect.second.first, rect.second.second}) ||
-											  checkSegmentIntersect<T>(prevPt, currPt,
-												                       {rect.second.first, rect.second.second},
-																	   {rect.first.first, rect.second.second}) ||
-											  checkSegmentIntersect<T>(prevPt, currPt,
-												                       {rect.first.first, rect.second.second},
-																	   {rect.first.first, rect.first.second}))) ||
-				(coord == COORD_POLAR && (true/*TODO*/))) {
+			if (prevInside || currInside ||
+				(coord == COORD_CARTESIAN && checkSegmentIntersect<T>(prevPt, currPt, rect)) ||
+				(coord == COORD_POLAR && checkSegmentIntersect<T>(prevPt, currPt, circle))) {
 				if (!updated)
 					cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, prevPt.first, prevPt.second, 0.0f, 0.0f, ""));
-				cmds.push_back(plt_render_cmd_(OP_LINETO, 20, px, py, 0.0f, 0.0f, ""));
+				cmds.push_back(plt_render_cmd_(OP_LINETO, 20, currPt.first, currPt.second, 0.0f, 0.0f, ""));
 				updated = true;
 			} else
 				updated = false;
 
-			prevflag = currflag; currflag = false;
+			prevInside = currInside;
+			currInside = false;
 			prevPt = currPt;
 		}
 
-		if (!pxpy.empty()) {
+		if (!markers.empty()) {
 			float h = curve->markerSize / 2.0f;
 			cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 30, 0.0f, 0.0f, 0.0f, 0.0f, curve->markerColor));
 			cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 30, 0.0f, 0.0f, 0.0f, 0.0f, "-"));
-			for (auto [px, py] : pxpy) {
+			for (auto [px, py] : markers) {
 				if (curve->markerShape == "x") {
 					cmds.push_back(plt_render_cmd_(OP_MOVETO, 30, px - h, py - h, 0.0f, 0.0f, ""));
 					cmds.push_back(plt_render_cmd_(OP_LINETO, 30, px + h, py + h, 0.0f, 0.0f, ""));
