@@ -1134,20 +1134,19 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 		bool prevInside, currInside;
 		bool moved = false;
 		for (size_t i = 0; i < std::min(xData.size(), yData.size()); ++i) {
+			currInside = false;
 			if (coord == COORD_CARTESIAN) {
 				currPt = {toPixelX(xData[i]), toPixelY(yData[i], curve->axisY)};
-				if (checkPointInside (currPt, rect)) {
+				if (checkPointInside (currPt, rect))
 					currInside = true;
-					if (curve->markerShape != "")
-						markers.push_back(currPt);
-				}
 			} else if (coord == COORD_POLAR) {
 				currPt = toPolarPixel(xData[i], yData[i]);
-				if (checkPointInside (currPt, circle)) {
+				if (checkPointInside (currPt, circle))
 					currInside = true;
-					if (curve->markerShape != "")
-						markers.push_back(currPt);
-				}
+			}
+			if (currInside) {
+				if (curve->markerShape != "")
+					markers.push_back(currPt);
 			}
 
 			if (i) {
@@ -1187,7 +1186,6 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 			}
 
 			prevInside = currInside;
-			currInside = false;
 			prevPt = currPt;
 		}
 
