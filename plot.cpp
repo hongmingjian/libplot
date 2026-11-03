@@ -1,5 +1,6 @@
 #include "plot.hpp"
 
+#include <optional>
 #include <sstream>
 #include <iomanip>
 
@@ -757,12 +758,6 @@ template <typename T>
 using Circle = std::pair<Point<T>, T>; // first: center, second: radius
 
 template <typename T>
-inline T crossProduct(const Point<T>& p0, const Point<T>& p1, const Point<T>& p2)
-{
-    return (p1.first - p0.first) * (p2.second - p0.second) - (p1.second - p0.second) * (p2.first - p0.first);
-}
-
-template <typename T>
 inline bool checkPointInside(const Point<T> &p, const Rect<T> &rect)
 {
 	return p.first >= rect.first.first && p.first < rect.second.first &&
@@ -778,72 +773,113 @@ inline bool checkPointInside(const Point<T> &p, const Circle<T> &circle)
 }
 
 template <typename T>
-inline bool checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Point<T>& p3, const Point<T>& p4)
+std::optional<Point<T>> checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2,
+                                              const Point<T>& p3, const Point<T>& p4)
 {
     if (std::max(p1.first, p2.first) < std::min(p3.first, p4.first) ||
         std::max(p3.first, p4.first) < std::min(p1.first, p2.first) ||
         std::max(p1.second, p2.second) < std::min(p3.second, p4.second) ||
         std::max(p3.second, p4.second) < std::min(p1.second, p2.second)) {
-        return false;
+        return std::nullopt;
     }
 
-    T cp1 = crossProduct(p1, p2, p3);
-    T cp2 = crossProduct(p1, p2, p4);
-    T cp3 = crossProduct(p3, p4, p1);
-    T cp4 = crossProduct(p3, p4, p2);
+    T rx = p2.first - p1.first;   // x2 - x1
+    T ry = p2.second - p1.second; // y2 - y1
+    T sx = p4.first - p3.first;   // x4 - x3
+    T sy = p4.second - p3.second; // y4 - y3
 
-    return (cp1 * cp2 <= 0) && (cp3 * cp4 <= 0);
+    T denom = rx * sy - ry * sx;
+    if (std::abs(denom) < std::numeric_limits<T>::epsilon())
+        return std::nullopt;
+
+    T dx = p3.first - p1.first;   // x3 - x1
+    T dy = p3.second - p1.second; // y3 - y1
+
+    T t = (dx * sy - dy * sx) / denom;
+    T u = (dx * ry - dy * rx) / denom;
+
+    bool t_valid = (t >= static_cast<T>(0.0) && t < static_cast<T>(1.0));
+    bool u_valid = (u >= static_cast<T>(0.0) && u < static_cast<T>(1.0));
+
+    if (t_valid && u_valid)
+        return Point<T>{p1.first + t * rx, p1.second + t * ry};
+
+    return std::nullopt;
 }
 
 /**
- * Both p1 and p2 must be outside the rect!
+ * Either p1 or p2 must be outside the rect!
  */
 template <typename T>
-bool checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Rect<T>& rect)
+std::vector<Point<T>> checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Rect<T>& r)
 {
-	return checkSegmentIntersect<T>(p1, p2,
-			                        {rect.first.first, rect.first.second},
-			                        {rect.second.first, rect.first.second}) ||
-		   checkSegmentIntersect<T>(p1, p2,
-					                {rect.second.first, rect.first.second},
-					                {rect.second.first, rect.second.second}) ||
-		   checkSegmentIntersect<T>(p1, p2,
-					                {rect.second.first, rect.second.second},
-					                {rect.first.first, rect.second.second}) ||
-		   checkSegmentIntersect<T>(p1, p2,
-				                    {rect.first.first, rect.second.second},
-				                    {rect.first.first, rect.first.second});
-}
+    std::vector<Point<T>> intersections;
 
-/**
- * Both p1 and p2 must be outside the circle!
- */
-template <typename T>
-bool checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Circle<T> &circle)
-{
-    T vx = p2.first - p1.first;
-    T vy = p2.second - p1.second;
-    T wx = circle.first.first - p1.first;
-    T wy = circle.first.second - p1.second;
-
-    T segment_len_sq = vx * vx + vy * vy;
-
-    if (segment_len_sq == 0)
-        return false;
-
-    T t = (wx * vx + wy * vy) / segment_len_sq;
-
-    if (t < 0.0 || t > 1.0)
-        return false;
-
-    std::pair<T, T> closest = {
-        p1.first + t * vx,
-        p1.second + t * vy
+    auto addIntersection = [&](const std::optional<Point<T>>& pt) {
+        if (pt.has_value())
+			intersections.push_back(*pt);
     };
 
-    T dx = closest.first - circle.first.first;
-    T dy = closest.second - circle.first.second;
-    return (dx * dx + dy * dy) < (circle.second * circle.second);
+    addIntersection(checkSegmentIntersect(p1, p2, {r.first.first, r.first.second}, {r.second.first, r.first.second}));
+    addIntersection(checkSegmentIntersect(p1, p2, {r.second.first, r.first.second}, {r.second.first, r.second.second}));
+    addIntersection(checkSegmentIntersect(p1, p2, {r.second.first, r.second.second}, {r.first.first, r.second.second}));
+    addIntersection(checkSegmentIntersect(p1, p2, {r.first.first, r.second.second}, {r.first.first, r.first.second}));
+
+	assert(intersections.size() <= 2);
+
+    return intersections;
+}
+
+/**
+ * Either p1 or p2 must be outside the circle!
+ */
+template <typename T>
+std::vector<Point<T>> checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Circle<T>& circle)
+{
+    std::vector<Point<T>> intersections;
+
+    T x1 = p1.first, y1 = p1.second;
+    T x2 = p2.first, y2 = p2.second;
+    T cx = circle.first.first;
+    T cy = circle.first.second;
+    T r  = circle.second;
+
+    T dx = x2 - x1;
+    T dy = y2 - y1;
+
+    T fx = x1 - cx;
+    T fy = y1 - cy;
+
+    T A = dx * dx + dy * dy;
+
+	// p2 == p1
+    if (A < std::numeric_limits<T>::epsilon())
+        return intersections;
+
+    T B = 2.0 * (fx * dx + fy * dy);
+    T C = fx * fx + fy * fy - r * r;
+
+    T discriminant = B * B - 4.0 * A * C;
+    if (discriminant < 0.0)
+        return intersections;
+
+    T sqrt_disc = std::sqrt(discriminant);
+    T two_A = 2.0 * A;
+
+    T t1 = (-B - sqrt_disc) / two_A;
+    T t2 = (-B + sqrt_disc) / two_A;
+
+    auto addValidPoint = [&](T t) {
+        if (t >= 0.0 && t < 1.0) {
+            intersections.emplace_back(x1 + t * dx, y1 + t * dy);
+        }
+    };
+
+    addValidPoint(t1);
+    if (discriminant > std::numeric_limits<T>::epsilon())
+        addValidPoint(t2);
+
+    return intersections;
 }
 
 inline struct plt_render_cmd plt_render_cmd_(
@@ -1109,7 +1145,7 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 			}
 		}
 
-		bool updated = false;
+		bool moved = false;
 		for (size_t i = 1; i < std::min(xData.size(), yData.size()); ++i) {
 			if (coord == COORD_CARTESIAN) {
 				currPt = {toPixelX(xData[i]), toPixelY(yData[i], curve->axisY)};
@@ -1131,15 +1167,39 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 				}
 			}
 
-			if (prevInside || currInside ||
-				(coord == COORD_CARTESIAN && checkSegmentIntersect<T>(prevPt, currPt, rect)) ||
-				(coord == COORD_POLAR && checkSegmentIntersect<T>(prevPt, currPt, circle))) {
-				if (!updated)
+			if (!prevInside || !currInside) {
+				std::vector<Point<T>> pts;
+				if (coord == COORD_CARTESIAN)
+					pts = checkSegmentIntersect<T>(prevPt, currPt, rect);
+				else if (coord == COORD_POLAR)
+					pts = checkSegmentIntersect<T>(prevPt, currPt, circle);
+
+				if (pts.empty())
+					moved = false;
+				else {
+					if (!prevInside && currInside) {
+						cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, pts[0].first, pts[0].second, 0.0f, 0.0f, ""));
+						cmds.push_back(plt_render_cmd_(OP_LINETO, 20, currPt.first, currPt.second, 0.0f, 0.0f, ""));
+						moved = true;
+					} else if (prevInside && !currInside) {
+						if (!moved)
+							cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, prevPt.first, prevPt.second, 0.0f, 0.0f, ""));
+						cmds.push_back(plt_render_cmd_(OP_LINETO, 20, pts[0].first, pts[0].second, 0.0f, 0.0f, ""));
+						moved = false;
+					} else {
+						if (pts.size() > 1) {
+							cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, pts[0].first, pts[0].second, 0.0f, 0.0f, ""));
+							cmds.push_back(plt_render_cmd_(OP_LINETO, 20, pts[1].first, pts[1].second, 0.0f, 0.0f, ""));
+						}
+						moved = false;
+					}
+				}
+			} else {
+				if (!moved)
 					cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, prevPt.first, prevPt.second, 0.0f, 0.0f, ""));
 				cmds.push_back(plt_render_cmd_(OP_LINETO, 20, currPt.first, currPt.second, 0.0f, 0.0f, ""));
-				updated = true;
-			} else
-				updated = false;
+				moved = true;
+			}
 
 			prevInside = currInside;
 			currInside = false;
