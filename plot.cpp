@@ -446,9 +446,8 @@ Plot<T>::Plot(int coord)
 template<typename T>
 Plot<T>::~Plot()
 {
-	for (Curve<T> *c : curves)
-		delete c;
-	curves.clear();
+	while (!curves.empty())
+		delete curves.front();
 }
 
 template<typename T>
