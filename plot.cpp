@@ -1,5 +1,9 @@
 #include "plot.hpp"
 
+#include <cmath>
+#include <cassert>
+#include <algorithm>
+#include <regex>
 #include <optional>
 #include <sstream>
 #include <iomanip>
@@ -72,6 +76,140 @@ static std::string FormatNumber(T val, int scale, std::string unit = "")
 
     oss << std::setprecision(4) << scaled_val << " " << prefixes[index] << unit;
     return oss.str();
+}
+
+template <typename T>
+using Point = std::pair<T, T>; // first: x, second: y
+
+template <typename T>
+using Rect = std::pair<Point<T>, Point<T>>; // first: (left, top), second: (right, bottom)
+
+template <typename T>
+using Circle = std::pair<Point<T>, T>; // first: center, second: radius
+
+template <typename T>
+inline bool checkPointInside(const Point<T> &p, const Rect<T> &rect)
+{
+	return p.first >= rect.first.first && p.first < rect.second.first &&
+		   p.second >= rect.first.second && p.second < rect.second.second;
+}
+
+template <typename T>
+inline bool checkPointInside(const Point<T> &p, const Circle<T> &circle)
+{
+	T dx = p.first - circle.first.first;
+	T dy = p.second - circle.first.second;
+	return (dx * dx + dy * dy) < (circle.second * circle.second);
+}
+
+template <typename T>
+std::optional<Point<T>> checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2,
+                                              const Point<T>& p3, const Point<T>& p4)
+{
+    if (std::max(p1.first, p2.first) < std::min(p3.first, p4.first) ||
+        std::max(p3.first, p4.first) < std::min(p1.first, p2.first) ||
+        std::max(p1.second, p2.second) < std::min(p3.second, p4.second) ||
+        std::max(p3.second, p4.second) < std::min(p1.second, p2.second)) {
+        return std::nullopt;
+    }
+
+    T rx = p2.first - p1.first;   // x2 - x1
+    T ry = p2.second - p1.second; // y2 - y1
+    T sx = p4.first - p3.first;   // x4 - x3
+    T sy = p4.second - p3.second; // y4 - y3
+
+    T denom = rx * sy - ry * sx;
+    if (std::abs(denom) < std::numeric_limits<T>::epsilon())
+        return std::nullopt;
+
+    T dx = p3.first - p1.first;   // x3 - x1
+    T dy = p3.second - p1.second; // y3 - y1
+
+    T t = (dx * sy - dy * sx) / denom;
+    T u = (dx * ry - dy * rx) / denom;
+
+    bool t_valid = (t >= static_cast<T>(0.0) && t < static_cast<T>(1.0));
+    bool u_valid = (u >= static_cast<T>(0.0) && u < static_cast<T>(1.0));
+
+    if (t_valid && u_valid)
+        return Point<T>{p1.first + t * rx, p1.second + t * ry};
+
+    return std::nullopt;
+}
+
+/**
+ * Either p1 or p2 must be outside the rect!
+ */
+template <typename T>
+std::vector<Point<T>> checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Rect<T>& r)
+{
+    std::vector<Point<T>> intersections;
+
+    auto addIntersection = [&](const std::optional<Point<T>>& pt) {
+        if (pt.has_value())
+			intersections.push_back(*pt);
+    };
+
+    addIntersection(checkSegmentIntersect(p1, p2, {r.first.first, r.first.second}, {r.second.first, r.first.second}));
+    addIntersection(checkSegmentIntersect(p1, p2, {r.second.first, r.first.second}, {r.second.first, r.second.second}));
+    addIntersection(checkSegmentIntersect(p1, p2, {r.second.first, r.second.second}, {r.first.first, r.second.second}));
+    addIntersection(checkSegmentIntersect(p1, p2, {r.first.first, r.second.second}, {r.first.first, r.first.second}));
+
+	assert(intersections.size() <= 2);
+
+    return intersections;
+}
+
+/**
+ * Either p1 or p2 must be outside the circle!
+ */
+template <typename T>
+std::vector<Point<T>> checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Circle<T>& circle)
+{
+    std::vector<Point<T>> intersections;
+
+    T x1 = p1.first, y1 = p1.second;
+    T x2 = p2.first, y2 = p2.second;
+    T cx = circle.first.first;
+    T cy = circle.first.second;
+    T r  = circle.second;
+
+    T dx = x2 - x1;
+    T dy = y2 - y1;
+
+    T fx = x1 - cx;
+    T fy = y1 - cy;
+
+    T A = dx * dx + dy * dy;
+
+	// p2 == p1
+    if (A < std::numeric_limits<T>::epsilon())
+        return intersections;
+
+    T B = 2.0 * (fx * dx + fy * dy);
+    T C = fx * fx + fy * fy - r * r;
+
+    T discriminant = B * B - 4.0 * A * C;
+    if (discriminant < 0.0)
+        return intersections;
+
+    T sqrt_disc = std::sqrt(discriminant);
+    T two_A = 2.0 * A;
+
+    T t1 = (-B - sqrt_disc) / two_A;
+    T t2 = (-B + sqrt_disc) / two_A;
+
+    auto addValidPoint = [&](T t) {
+        if (t >= 0.0 && t < 1.0) {
+            intersections.emplace_back(x1 + t * dx, y1 + t * dy);
+        }
+    };
+
+    addValidPoint(t1);
+    if (discriminant > std::numeric_limits<T>::epsilon())
+        addValidPoint(t2);
+
+    return intersections;
 }
 
 template<typename T>
@@ -746,140 +884,6 @@ int Plot<T>::set_option(const std::string& option, const std::string& value)
 		}
 	}
 	return -1;
-}
-
-template <typename T>
-using Point = std::pair<T, T>; // first: x, second: y
-
-template <typename T>
-using Rect = std::pair<Point<T>, Point<T>>; // first: (left, top), second: (right, bottom)
-
-template <typename T>
-using Circle = std::pair<Point<T>, T>; // first: center, second: radius
-
-template <typename T>
-inline bool checkPointInside(const Point<T> &p, const Rect<T> &rect)
-{
-	return p.first >= rect.first.first && p.first < rect.second.first &&
-		   p.second >= rect.first.second && p.second < rect.second.second;
-}
-
-template <typename T>
-inline bool checkPointInside(const Point<T> &p, const Circle<T> &circle)
-{
-	T dx = p.first - circle.first.first;
-	T dy = p.second - circle.first.second;
-	return (dx * dx + dy * dy) < (circle.second * circle.second);
-}
-
-template <typename T>
-std::optional<Point<T>> checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2,
-                                              const Point<T>& p3, const Point<T>& p4)
-{
-    if (std::max(p1.first, p2.first) < std::min(p3.first, p4.first) ||
-        std::max(p3.first, p4.first) < std::min(p1.first, p2.first) ||
-        std::max(p1.second, p2.second) < std::min(p3.second, p4.second) ||
-        std::max(p3.second, p4.second) < std::min(p1.second, p2.second)) {
-        return std::nullopt;
-    }
-
-    T rx = p2.first - p1.first;   // x2 - x1
-    T ry = p2.second - p1.second; // y2 - y1
-    T sx = p4.first - p3.first;   // x4 - x3
-    T sy = p4.second - p3.second; // y4 - y3
-
-    T denom = rx * sy - ry * sx;
-    if (std::abs(denom) < std::numeric_limits<T>::epsilon())
-        return std::nullopt;
-
-    T dx = p3.first - p1.first;   // x3 - x1
-    T dy = p3.second - p1.second; // y3 - y1
-
-    T t = (dx * sy - dy * sx) / denom;
-    T u = (dx * ry - dy * rx) / denom;
-
-    bool t_valid = (t >= static_cast<T>(0.0) && t < static_cast<T>(1.0));
-    bool u_valid = (u >= static_cast<T>(0.0) && u < static_cast<T>(1.0));
-
-    if (t_valid && u_valid)
-        return Point<T>{p1.first + t * rx, p1.second + t * ry};
-
-    return std::nullopt;
-}
-
-/**
- * Either p1 or p2 must be outside the rect!
- */
-template <typename T>
-std::vector<Point<T>> checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Rect<T>& r)
-{
-    std::vector<Point<T>> intersections;
-
-    auto addIntersection = [&](const std::optional<Point<T>>& pt) {
-        if (pt.has_value())
-			intersections.push_back(*pt);
-    };
-
-    addIntersection(checkSegmentIntersect(p1, p2, {r.first.first, r.first.second}, {r.second.first, r.first.second}));
-    addIntersection(checkSegmentIntersect(p1, p2, {r.second.first, r.first.second}, {r.second.first, r.second.second}));
-    addIntersection(checkSegmentIntersect(p1, p2, {r.second.first, r.second.second}, {r.first.first, r.second.second}));
-    addIntersection(checkSegmentIntersect(p1, p2, {r.first.first, r.second.second}, {r.first.first, r.first.second}));
-
-	assert(intersections.size() <= 2);
-
-    return intersections;
-}
-
-/**
- * Either p1 or p2 must be outside the circle!
- */
-template <typename T>
-std::vector<Point<T>> checkSegmentIntersect(const Point<T>& p1, const Point<T>& p2, const Circle<T>& circle)
-{
-    std::vector<Point<T>> intersections;
-
-    T x1 = p1.first, y1 = p1.second;
-    T x2 = p2.first, y2 = p2.second;
-    T cx = circle.first.first;
-    T cy = circle.first.second;
-    T r  = circle.second;
-
-    T dx = x2 - x1;
-    T dy = y2 - y1;
-
-    T fx = x1 - cx;
-    T fy = y1 - cy;
-
-    T A = dx * dx + dy * dy;
-
-	// p2 == p1
-    if (A < std::numeric_limits<T>::epsilon())
-        return intersections;
-
-    T B = 2.0 * (fx * dx + fy * dy);
-    T C = fx * fx + fy * fy - r * r;
-
-    T discriminant = B * B - 4.0 * A * C;
-    if (discriminant < 0.0)
-        return intersections;
-
-    T sqrt_disc = std::sqrt(discriminant);
-    T two_A = 2.0 * A;
-
-    T t1 = (-B - sqrt_disc) / two_A;
-    T t2 = (-B + sqrt_disc) / two_A;
-
-    auto addValidPoint = [&](T t) {
-        if (t >= 0.0 && t < 1.0) {
-            intersections.emplace_back(x1 + t * dx, y1 + t * dy);
-        }
-    };
-
-    addValidPoint(t1);
-    if (discriminant > std::numeric_limits<T>::epsilon())
-        addValidPoint(t2);
-
-    return intersections;
 }
 
 inline struct plt_render_cmd plt_render_cmd_(
