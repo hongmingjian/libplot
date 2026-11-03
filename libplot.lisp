@@ -355,7 +355,7 @@
    :height 600
    :title "Libplot demo"))
 
-(defun archimedean-spiral (nturns points-per-turn &key (polar nil))
+(defun archimedean-spiral (nturns &key (points-per-turn 72) (polar nil))
   (let* ((npoints (1+ (* nturns points-per-turn)))
          (x-vec (make-array npoints :element-type 'single-float :allocation :static))
          (y-vec (make-array npoints :element-type 'single-float :allocation :static))
@@ -367,6 +367,26 @@
           for r = (+ a (* b theta))
           do (setf (aref x-vec i) (coerce (if polar
                                               (rem theta (* 2.0 pi))
+                                              (* r (cos theta)))
+                                          'single-float)
+                   (aref y-vec i) (coerce (if polar
+                                              r
+                                              (* r (sin theta)))
+                                          'single-float)))
+    (values x-vec y-vec npoints)))
+
+(defun rose-curve (k &key (points-per-turn 72) (polar nil))
+  (let* ((b 1.0)
+         (max-angle (* 2.0 pi))
+         (npoints (1+ (round (* k points-per-turn))))
+         (x-vec (make-array npoints :element-type 'single-float :allocation :static))
+         (y-vec (make-array npoints :element-type 'single-float :allocation :static)))
+
+    (loop for i from 0 below npoints
+          for theta = (* i (/ max-angle (1- npoints)))
+          for r = (* b (cos (* k theta)))
+          do (setf (aref x-vec i) (coerce (if polar
+                                              theta
                                               (* r (cos theta)))
                                           'single-float)
                    (aref y-vec i) (coerce (if polar
@@ -444,8 +464,10 @@
              (crvs (window-plt-curves interface)))
          (unless (or (null plot) (fli:null-pointer-p plot))
            (multiple-value-bind (x-vec y-vec count)
-             (archimedean-spiral (+ 3 (random 3)) 72
-                                 :polar (/= (window-plt-coord interface) +coord-cartesian+))
+             ;(archimedean-spiral
+             (rose-curve
+               (+ 3 (random 3))
+               :polar (/= (window-plt-coord interface) +coord-cartesian+))
              (if (> (length crvs) 0)
                  (plt-curve (first crvs) x-vec y-vec count)
                  (let ((crv (plt-curve plot x-vec y-vec count)))
