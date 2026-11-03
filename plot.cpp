@@ -1128,41 +1128,21 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_COLOR, 20, 0.0f, 0.0f, 0.0f, 0.0f, curve->color));
 		cmds.push_back(plt_render_cmd_(OP_SET_LINE_STYLE, 20, 0.0f, 0.0f, 0.0f, 0.0f, curve->style));
 
-		Point<float> prevPt, currPt;
 		std::vector<Point<float>> markers;
-		bool prevInside = false, currInside = false;
 
-		if (coord == COORD_CARTESIAN) {
-			prevPt = {toPixelX(xData[0]), toPixelY(yData[0], curve->axisY)};
-			if (checkPointInside (prevPt, rect)) {
-				if (curve->markerShape != "")
-					markers.push_back(prevPt);
-				prevInside = true;
-			}
-		} else if (coord == COORD_POLAR) {
-			prevPt = toPolarPixel(xData[0], yData[0]);
-			if (checkPointInside (prevPt, circle)) {
-				if (curve->markerShape != "")
-					markers.push_back(prevPt);
-				prevInside = true;
-			}
-		}
-
+		Point<float> prevPt, currPt;
+		bool prevInside, currInside;
 		bool moved = false;
-		for (size_t i = 1; i < std::min(xData.size(), yData.size()); ++i) {
+		for (size_t i = 0; i < std::min(xData.size(), yData.size()); ++i) {
 			if (coord == COORD_CARTESIAN) {
 				currPt = {toPixelX(xData[i]), toPixelY(yData[i], curve->axisY)};
-			} else if (coord == COORD_POLAR) {
-				currPt = toPolarPixel(xData[i], yData[i]);
-			}
-
-			if (coord == COORD_CARTESIAN) {
 				if (checkPointInside (currPt, rect)) {
 					currInside = true;
 					if (curve->markerShape != "")
 						markers.push_back(currPt);
 				}
 			} else if (coord == COORD_POLAR) {
+				currPt = toPolarPixel(xData[i], yData[i]);
 				if (checkPointInside (currPt, circle)) {
 					currInside = true;
 					if (curve->markerShape != "")
@@ -1170,38 +1150,40 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 				}
 			}
 
-			if (!prevInside || !currInside) {
-				std::vector<Point<T>> pts;
-				if (coord == COORD_CARTESIAN)
-					pts = checkSegmentIntersect<T>(prevPt, currPt, rect);
-				else if (coord == COORD_POLAR)
-					pts = checkSegmentIntersect<T>(prevPt, currPt, circle);
+			if (i) {
+				if (!prevInside || !currInside) {
+					std::vector<Point<T>> pts;
+					if (coord == COORD_CARTESIAN)
+						pts = checkSegmentIntersect<T>(prevPt, currPt, rect);
+					else if (coord == COORD_POLAR)
+						pts = checkSegmentIntersect<T>(prevPt, currPt, circle);
 
-				if (pts.empty())
-					moved = false;
-				else {
-					if (!prevInside && currInside) {
-						cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, pts[0].first, pts[0].second, 0.0f, 0.0f, ""));
-						cmds.push_back(plt_render_cmd_(OP_LINETO, 20, currPt.first, currPt.second, 0.0f, 0.0f, ""));
-						moved = true;
-					} else if (prevInside && !currInside) {
-						if (!moved)
-							cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, prevPt.first, prevPt.second, 0.0f, 0.0f, ""));
-						cmds.push_back(plt_render_cmd_(OP_LINETO, 20, pts[0].first, pts[0].second, 0.0f, 0.0f, ""));
+					if (pts.empty())
 						moved = false;
-					} else {
-						if (pts.size() > 1) {
+					else {
+						if (!prevInside && currInside) {
 							cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, pts[0].first, pts[0].second, 0.0f, 0.0f, ""));
-							cmds.push_back(plt_render_cmd_(OP_LINETO, 20, pts[1].first, pts[1].second, 0.0f, 0.0f, ""));
+							cmds.push_back(plt_render_cmd_(OP_LINETO, 20, currPt.first, currPt.second, 0.0f, 0.0f, ""));
+							moved = true;
+						} else if (prevInside && !currInside) {
+							if (!moved)
+								cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, prevPt.first, prevPt.second, 0.0f, 0.0f, ""));
+							cmds.push_back(plt_render_cmd_(OP_LINETO, 20, pts[0].first, pts[0].second, 0.0f, 0.0f, ""));
+							moved = false;
+						} else {
+							if (pts.size() > 1) {
+								cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, pts[0].first, pts[0].second, 0.0f, 0.0f, ""));
+								cmds.push_back(plt_render_cmd_(OP_LINETO, 20, pts[1].first, pts[1].second, 0.0f, 0.0f, ""));
+							}
+							moved = false;
 						}
-						moved = false;
 					}
+				} else {
+					if (!moved)
+						cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, prevPt.first, prevPt.second, 0.0f, 0.0f, ""));
+					cmds.push_back(plt_render_cmd_(OP_LINETO, 20, currPt.first, currPt.second, 0.0f, 0.0f, ""));
+					moved = true;
 				}
-			} else {
-				if (!moved)
-					cmds.push_back(plt_render_cmd_(OP_MOVETO, 20, prevPt.first, prevPt.second, 0.0f, 0.0f, ""));
-				cmds.push_back(plt_render_cmd_(OP_LINETO, 20, currPt.first, currPt.second, 0.0f, 0.0f, ""));
-				moved = true;
 			}
 
 			prevInside = currInside;
