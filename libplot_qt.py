@@ -297,17 +297,16 @@ def execute_render_cmds(painter, commands):
 
         elif op == 2:  # OP_DRAW_TEXT
             painter.save()
+
+            painter.translate(x, y)
+            painter.rotate(-180 * arg1 / math.pi)
             painter.setPen(text_color)
-            if arg1 != 0:
-                painter.rotate(arg1)
-            align_val = int(arg2)
 
             metrics = painter.fontMetrics()
             width = metrics.horizontalAdvance(arg3)
             height = metrics.height()
 
-            painter.translate(x, y)
-
+            align_val = int(arg2)
             h_align = align_val & 0x0000FFFF
             v_align = align_val & 0xFFFF0000
 
