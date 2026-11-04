@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import ctypes
-from enum import IntEnum
 
 class LibPlot:
-    class OpCode(IntEnum):
+    class OpCode:
         OP_SET_TEXT_COLOR = 1
         OP_DRAW_TEXT = 2
         OP_SET_LINE_COLOR = 3
@@ -15,19 +14,19 @@ class LibPlot:
         OP_DRAW_ELLIPSE = 8
         OP_DRAW_RECT = 9
 
-    class CoordSystem(IntEnum):
+    class CoordSystem:
         COORD_CARTESIAN = 0
         COORD_POLAR = 1
 
-    class Axis(IntEnum):
+    class Axis:
         AXIS_PRIMARY = 0
         AXIS_SECONDARY = 1
 
-    class Scale(IntEnum):
+    class Scale:
         SCALE_LINEAR = 0
         SCALE_LOG = 1
 
-    class Alignment(IntEnum):
+    class Alignment:
         ALIGN_LEFT = 0x00000000
         ALIGN_HCENTER = 0x00000001
         ALIGN_RIGHT = 0x00000002
@@ -130,7 +129,7 @@ class LibPlot:
     def destroy(self, plt_handle):
         self._lib.plt_destroy(plt_handle)
 
-    def set_option(self, plt_handle, option: str, value: str) -> int:
+    def set_option(self, plt_handle, option, value):
         return self._lib.plt_set_option(
             plt_handle, option.encode("utf-8"), value.encode("utf-8")
         )
