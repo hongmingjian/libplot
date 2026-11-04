@@ -398,14 +398,14 @@
 (defun on-create-pane (pane)
   (let ((interface (capi:element-interface pane)))
     (fli:register-module "libplot"
-                         :real-name "Z:\\hmj\\Sourcery\\libplot\\Debug\\libplot.dll"
+                         :real-name "libplot.dll"
                          )
     (let ((plot (plt-create (window-plt-coord interface))))
       (if (fli:null-pointer-p plot)
           (error "Failed to create a plot")
           (progn
             (setf (window-plt-handle interface) plot)
-            (plt-set-option plot "plot.title" "Archimedean spiral")
+            (plt-set-option plot "plot.title" "Rose curve")
             (plt-set-option plot "plot.background.color" "#aaaaaa")
             (plt-set-option plot "plot.font.size"
                             (format nil "~Ax~A"
