@@ -370,7 +370,7 @@ def execute_render_cmds(painter, commands):
     painter.restore()
 
 
-import sys, math
+import os, sys, math
 from PyQt5 import QtWidgets
 
 def generate_rose_curve(k=4.0, a=1.0, num_points=360, polar=False):
@@ -395,12 +395,19 @@ class MyWidget(QtWidgets.QWidget):
 
         self.drag_start_pos = None
         self.setMouseTracking(True)
-
         try:
-            self.libplot = LibPlot("libplot.dll")
+            cwd = os.path.dirname(os.path.abspath(__file__))
+            lib_file = "libplot"
+            if sys.platform.startswith("win"):
+                lib_file += ".dll"
+            elif sys.platform == "darwin":
+                lib_file += ".dylib"
+            else:
+                lib_file += ".so"
+            self.libplot = LibPlot(os.path.join(cwd, lib_file))
         except Exception as e:
             self.libplot = None
-            print(f"Failed to load LibPlot: {e}")
+            print("Failed to load LibPlot: %s" % e)
 
         if self.libplot:
             coord = LibPlot.CoordSystem.COORD_POLAR#CARTESIAN
