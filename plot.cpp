@@ -890,7 +890,7 @@ inline struct plt_render_cmd plt_render_cmd_(
 		float x, float y, float arg1, float arg2, const std::string& arg3)
 {
     struct plt_render_cmd cmd{op, zIndex, 0, x, y, arg1, arg2, ""};
-    strncpy_s(cmd.arg3, sizeof(cmd.arg3), arg3.c_str(), _TRUNCATE);
+	std::snprintf(cmd.arg3, sizeof(cmd.arg3), "%s", arg3.c_str());
     return cmd;
 }
 
