@@ -303,7 +303,10 @@ def execute_render_cmds(painter, commands):
             painter.setPen(text_color)
 
             metrics = painter.fontMetrics()
-            width = metrics.horizontalAdvance(arg3)
+            if hasattr(metrics, "horizontalAdvance"):
+                width = metrics.horizontalAdvance(arg3)
+            else:
+                width = metrics.width(arg3)
             height = metrics.height()
 
             align_val = int(arg2)
