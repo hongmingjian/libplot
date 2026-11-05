@@ -208,6 +208,7 @@ class LibPlot:
             )
         return commands
 
+import math
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import Qt
 
@@ -370,7 +371,7 @@ def execute_render_cmds(painter, commands):
     painter.restore()
 
 
-import os, sys, math
+import os, sys
 from PyQt5 import QtWidgets
 
 def generate_rose_curve(k=4.0, a=1.0, num_points=360, polar=False):
