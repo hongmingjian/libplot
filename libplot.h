@@ -2,25 +2,62 @@
 #define LIBPLOT_H
 
 /**
- * NOTE: Change here to use float or double
+ * NOTE: Change here to use float or double for your coordinate
  */
-typedef float real;
-//typedef double real;
+typedef float real_t;
+//typedef double real_t;
 
 #ifndef LIBPLOT_EXPORTS
+/**
+ * create and destroy a plot.
+ */
 void *plt_create(int coord);
 void plt_destroy(void *plt);
 
+/**
+ * The `handle' is a handle of plot/curve.
+ * Please look at Plot::set_option and Curve::set_option for options.
+ */
 int plt_set_option(void *handle, const char *option, const char *value);
 
-void plt_pan(void *plt, real dx, real dy);
-void plt_zoom(void *plt, real cx, real cy, float factor);
-void plt_pix2math(void *plt, float px, float py, real *x, real *y, real *y2);
+/**
+ * dx, dy - delta in x, y direction.
+ * cx, cy - x, y of center for zoom in/out.
+ * factor - <1 for zoom out, >1 for zoom in
+ *
+ * dx, dy, cx, cy are all in pixels.
+ */
+void plt_pan(void *plt, float dx, float dy);
+void plt_zoom(void *plt, float cx, float cy, float factor);
 
-void *plt_curve(void *handle, const real *x, const real *y, int count);
-void plt_append(void *crv, const real *x, const real *y, int count);
+/**
+ * Get coordinates for given screen position (px, py) in pixels.
+ *
+ * If secondary(right) Y axis is not visible, y2 is not touched.
+ */
+void plt_pix2math(void *plt, float px, float py, real_t *x, real_t *y, real_t *y2);
+
+/**
+ * If `handle' is a handle of plot, this function will create a new curve within the plot and
+ * return the handle of newly created curve.
+ *
+ * And if `handle' is a handle of curve, it will update the data of specified curve.
+ */
+void *plt_curve(void *handle, const real_t *x, const real_t *y, int count);
+
+/**
+ * Append data to the end of an existing curve.
+ */
+void plt_append(void *crv, const real_t *x, const real_t *y, int count);
+
+/**
+ * Remove the curve and destroy it.
+ */
 void plt_remove(void *crv);
 
+/**
+ * Render the coordinate system and curves, then output the instructions.
+ */
 int plt_render(void *plt, struct plt_render_cmd *out, int nout);
 #endif
 
