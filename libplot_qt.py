@@ -374,7 +374,7 @@ def execute_render_cmds(painter, commands):
 import os, sys
 from PyQt5 import QtWidgets
 
-def generate_rose_curve(k=4.0, a=1.0, num_points=360, polar=False):
+def generate_rose_curve(k=4, a=1.0, num_points=360, polar=False):
     max_theta = 2 * math.pi
     theta = [i * max_theta / (num_points - 1) for i in range(num_points)]
     r = [a * math.cos(k * t) for t in theta]
@@ -422,7 +422,6 @@ class MyWidget(QtWidgets.QWidget):
             self.libplot.set_option(self.curve_ptr, "curve.marker.shape", "s")
             self.libplot.set_option(self.curve_ptr, "curve.marker.color", "#FF0000")
 
-        self.curves = []
         self.installEventFilter(self)
 
     def closeEvent(self, event):
