@@ -20,6 +20,13 @@
            ))
 (in-package :libplot)
 
+(defvar *dir-of-this-file*
+  (load-time-value
+    (let ((path (or *load-pathname* *compile-file-pathname*)))
+      (if path
+          (uiop:pathname-directory-pathname path)
+          (namestring (truename *default-pathname-defaults*))))))
+
 (fli:define-c-struct plt-render-cmd
   (cmd  :unsigned-int)
   (x    :float)
@@ -300,8 +307,9 @@
       )))
 
 (defun execute-render-cmds (pane ptr-rcmds count)
+  (declare (type fixnum count))
   (when (> count 0)
-    (let ((indices (loop for i from 0 below count collect i)))
+    (let ((indices (loop for i of-type fixnum from 0 below count collect i)))
 
       (setf indices
             (stable-sort indices #'<
@@ -356,49 +364,53 @@
    :title "Libplot demo"))
 
 (defun archimedean-spiral (nturns &key (points-per-turn 72) (polar nil))
+  (declare (optimize (speed 3) (safety 0) (debug 0))
+           (type fixnum nturns points-per-turn))
   (let* ((npoints (1+ (* nturns points-per-turn)))
          (x-vec (make-array npoints :element-type 'single-float :allocation :static))
          (y-vec (make-array npoints :element-type 'single-float :allocation :static))
-         (a 0)
-         (b 1)
+         (a 0.0d0)
+         (b 1.0d0)
          )
-    (loop for i from 0 below npoints
-          for theta = (* i (/ (* 2.0 pi) points-per-turn))
+    (loop for i of-type fixnum from 0 below npoints
+          for theta = (* i (/ (* 2.0d0 pi) points-per-turn))
           for r = (+ a (* b theta))
-          do (setf (aref x-vec i) (coerce (if polar
-                                              (rem theta (* 2.0 pi))
-                                              (* r (cos theta)))
-                                          'single-float)
-                   (aref y-vec i) (coerce (if polar
-                                              r
-                                              (* r (sin theta)))
-                                          'single-float)))
+          do (setf (aref x-vec i) (float (if polar
+                                             (rem theta (* 2.0d0 pi))
+                                             (* r (cos theta)))
+                                          1.0f0)
+                   (aref y-vec i) (float (if polar
+                                             r
+                                             (* r (sin theta)))
+                                          1.0f0)))
     (values x-vec y-vec npoints)))
 
 (defun rose-curve (k &key (points-per-turn 72) (polar nil))
-  (let* ((b 1.0)
-         (max-angle (* 2.0 pi))
-         (npoints (1+ (round (* k points-per-turn))))
+  (declare (optimize (speed 3) (safety 0) (debug 0))
+           (type fixnum k points-per-turn))
+  (let* ((b 1.0d0)
+         (max-angle (* 2.0d0 pi))
+         (npoints (1+ (the fixnum (round (* k points-per-turn)))))
          (x-vec (make-array npoints :element-type 'single-float :allocation :static))
-         (y-vec (make-array npoints :element-type 'single-float :allocation :static)))
-
-    (loop for i from 0 below npoints
-          for theta = (* i (/ max-angle (1- npoints)))
+         (y-vec (make-array npoints :element-type 'single-float :allocation :static))
+         (astep (/ max-angle (1- npoints)))
+         )
+    (loop for i of-type fixnum from 0 below npoints
+          for theta = (* i astep)
           for r = (* b (cos (* k theta)))
-          do (setf (aref x-vec i) (coerce (if polar
-                                              theta
-                                              (* r (cos theta)))
-                                          'single-float)
-                   (aref y-vec i) (coerce (if polar
-                                              r
-                                              (* r (sin theta)))
-                                          'single-float)))
+          do (setf (aref x-vec i) (float (if polar
+                                             theta
+                                             (* r (cos theta))) 1.0f0)
+                   (aref y-vec i) (float (if polar
+                                             r
+                                             (* r (sin theta))) 1.0f0)
+                   ))
     (values x-vec y-vec npoints)))
 
 (defun on-create-pane (pane)
   (let ((interface (capi:element-interface pane)))
     (fli:register-module "libplot"
-                         :real-name "libplot.dll"
+                         :real-name (merge-pathnames "libplot.dll" *dir-of-this-file*)
                          )
     (let ((plot (plt-create (window-plt-coord interface))))
       (if (fli:null-pointer-p plot)
