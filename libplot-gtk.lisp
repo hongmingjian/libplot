@@ -1,5 +1,5 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (ql:quickload '(:cffi :cl-cffi-gtk float-features) :silent t))
+  (ql:quickload '(:cffi :cl-cffi-gtk :float-features) :silent t))
 
 (in-package :cl-user)
 
@@ -22,12 +22,6 @@
            #:demo))
 
 (in-package :libplot)
-
-(defvar *dir-of-this-file*
-  (let ((path (or *load-pathname* *compile-file-pathname*)))
-    (if path
-        (uiop:pathname-directory-pathname path)
-        (uiop:getcwd))))
 
 (cffi:define-foreign-library libplot
   (:windows "libplot.dll")
