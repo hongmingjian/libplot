@@ -20,13 +20,6 @@
            ))
 (in-package :libplot)
 
-(defvar *dir-of-this-file*
-  (load-time-value
-    (let ((path (or *load-pathname* *compile-file-pathname*)))
-      (if path
-          (uiop:pathname-directory-pathname path)
-          (namestring (truename *default-pathname-defaults*))))))
-
 (fli:define-c-struct plt-render-cmd
   (cmd  :unsigned-int)
   (x    :float)
@@ -399,7 +392,7 @@
 (defun on-create-pane (pane)
   (let ((interface (capi:element-interface pane)))
     (fli:register-module "libplot"
-                         :real-name (merge-pathnames "libplot.dll" *dir-of-this-file*)
+                         :real-name "libplot.dll"
                          )
     (let ((plot (plt-create (window-plt-coord interface))))
       (if (fli:null-pointer-p plot)
