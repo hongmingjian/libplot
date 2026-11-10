@@ -72,25 +72,48 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct plt_render_cmd>& cmds) {
     });
 
     COLORREF oldTextColor = GetTextColor(hdc);
-	COLORREF curLineColor;
-    int curLineStyle;
-    int curLineWidth;
+	COLORREF curPenColor;
+    int curPenStyle;
+    int curPenWidth;
 
 	{
 		LOGPEN lp = { 0 };
 		GetObjectA(GetCurrentObject(hdc, OBJ_PEN), sizeof(LOGPEN), &lp);
-		curLineColor = lp.lopnColor;
-		curLineStyle = lp.lopnStyle;
-		curLineWidth = lp.lopnWidth.x ? lp.lopnWidth.x : 1;
+		curPenColor = lp.lopnColor;
+		curPenStyle = lp.lopnStyle;
+		curPenWidth = lp.lopnWidth.x ? lp.lopnWidth.x : 1;
 	}
     HPEN hCurPen = NULL;
     HPEN hOldPen = NULL;
 
     for (auto& cmd : cmds) {
         switch (cmd.op) {
-        case OP_SET_TEXT_COLOR:
-            SetTextColor(hdc, convertColor(cmd.arg3));
+        case OP_SET_PEN_COLOR:
+        case OP_SET_PEN_STYLE:
+        case OP_SET_PEN_WIDTH:
+			if (cmd.op == OP_SET_PEN_COLOR) {
+				curPenColor = convertColor(cmd.arg3);
+                SetTextColor(hdc, curPenColor);
+            } else if (cmd.op == OP_SET_PEN_STYLE)
+				curPenStyle = convertLineStyle(cmd.arg3);
+			else if (cmd.op == OP_SET_PEN_WIDTH) {
+				curPenWidth = (int)cmd.arg1;
+				if (curPenWidth < 1)
+					curPenWidth = 1;
+			}
+			if (hOldPen)
+				SelectObject(hdc, hOldPen);
+			if (hCurPen)
+				DeleteObject(hCurPen);
+            hCurPen = CreateGDIRenderPen(curPenStyle, curPenWidth, curPenColor);
+            hOldPen = (HPEN)SelectObject(hdc, hCurPen);
             break;
+        case OP_MOVETO:
+			MoveToEx(hdc, (int)cmd.x, (int)cmd.y, NULL);
+			break;
+        case OP_LINETO:
+			LineTo(hdc, (int)cmd.x, (int)cmd.y);
+			break;
         case OP_DRAW_TEXT: {
 		    LOGFONTA lf = { 0 };
 		    GetObjectA(GetCurrentObject(hdc, OBJ_FONT), sizeof(LOGFONTA), &lf);
@@ -130,31 +153,6 @@ void ExecuteDrawCommands(HDC hdc, std::vector<struct plt_render_cmd>& cmds) {
 			}
             break;
         }
-        case OP_SET_LINE_COLOR:
-        case OP_SET_LINE_STYLE:
-        case OP_SET_LINE_WIDTH:
-			if (cmd.op == OP_SET_LINE_COLOR)
-				curLineColor = convertColor(cmd.arg3);
-			else if (cmd.op == OP_SET_LINE_STYLE)
-				curLineStyle = convertLineStyle(cmd.arg3);
-			else if (cmd.op == OP_SET_LINE_WIDTH) {
-				curLineWidth = (int)cmd.arg1;
-				if (curLineWidth < 1)
-					curLineWidth = 1;
-			}
-			if (hOldPen)
-				SelectObject(hdc, hOldPen);
-			if (hCurPen)
-				DeleteObject(hCurPen);
-            hCurPen = CreateGDIRenderPen(curLineStyle, curLineWidth, curLineColor);
-            hOldPen = (HPEN)SelectObject(hdc, hCurPen);
-            break;
-        case OP_MOVETO:
-			MoveToEx(hdc, (int)cmd.x, (int)cmd.y, NULL);
-			break;
-        case OP_LINETO:
-			LineTo(hdc, (int)cmd.x, (int)cmd.y);
-			break;
         case OP_DRAW_ELLIPSE: {
 			HBRUSH hCurBrush = NULL;
 			HBRUSH hOldBrush = NULL;

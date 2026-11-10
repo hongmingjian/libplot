@@ -75,8 +75,9 @@ private:
 
 	std::map<std::string, float> paddings = {{"L", 60}, {"T", 40}, {"R", 60}, {"B", 40}}; //pixels
 
-	std::string title = "";
     std::string backgroundColor = ""; // empty for transparent
+	std::string title = "";
+    std::string titleColor = "#000000";
 
 	std::vector<Curve<T> *> curves;
 	Curve<T> *addCurve(Curve<T> *curve);

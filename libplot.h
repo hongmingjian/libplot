@@ -74,13 +74,12 @@ struct plt_render_cmd {
 enum {
     OP_NONE = 0,
 
-    OP_SET_TEXT_COLOR, // arg3: color
-    OP_DRAW_TEXT,      // x, y: position, arg1: angle, arg2: alignment, arg3: text
-    OP_SET_LINE_COLOR, // arg3: color
-    OP_SET_LINE_STYLE, // arg3: style
-    OP_SET_LINE_WIDTH, // arg1: width
+    OP_SET_PEN_COLOR, // arg3: color
+    OP_SET_PEN_STYLE, // arg3: style
+    OP_SET_PEN_WIDTH, // arg1: width
     OP_MOVETO,         // x, y: position
     OP_LINETO,         // x, y: position
+    OP_DRAW_TEXT,      // x, y: position, arg1: angle, arg2: alignment, arg3: text
     OP_DRAW_ELLIPSE,   // x, y: center, arg1/2: length of semi-major/minor, arg3: fill color
 	OP_DRAW_RECT,      // x, y: left/top, arg1/2: width/height, arg3: fill color
 
