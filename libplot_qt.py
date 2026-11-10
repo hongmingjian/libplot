@@ -4,15 +4,14 @@ import ctypes
 
 class LibPlot:
     class OpCode:
-        OP_SET_TEXT_COLOR = 1
-        OP_DRAW_TEXT = 2
-        OP_SET_LINE_COLOR = 3
-        OP_SET_LINE_STYLE = 4
-        OP_SET_LINE_WIDTH = 5
-        OP_MOVETO = 6
-        OP_LINETO = 7
-        OP_DRAW_ELLIPSE = 8
-        OP_DRAW_RECT = 9
+        OP_SET_PEN_COLOR = 1
+        OP_SET_PEN_STYLE = 2
+        OP_SET_PEN_WIDTH = 3
+        OP_MOVETO = 4
+        OP_LINETO = 5
+        OP_DRAW_TEXT = 6
+        OP_DRAW_ELLIPSE = 7
+        OP_DRAW_RECT = 8
 
     class CoordSystem:
         COORD_CARTESIAN = 0
@@ -248,7 +247,7 @@ def execute_render_cmds(painter, commands):
         return QtGui.QColor(0, 0, 0)
 
 
-    def convert_line_style(style_str):
+    def convert_pen_style(style_str):
         if style_str is None:
             return Qt.NoPen
 
@@ -274,10 +273,9 @@ def execute_render_cmds(painter, commands):
     painter.save()
     painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
 
-    text_color = QtGui.QColor(0, 0, 0)
-    line_color = QtGui.QColor(0, 0, 0)
-    line_width = 1.0
-    line_style = Qt.NoPen
+    pen_color = QtGui.QColor(0, 0, 0)
+    pen_width = 1.0
+    pen_style = Qt.NoPen
 
     last_x, last_y = 0.0, 0.0
 
@@ -292,15 +290,31 @@ def execute_render_cmds(painter, commands):
         if op == 0:  # OP_NONE
             continue
 
-        elif op == 1:  # OP_SET_TEXT_COLOR (arg3: color)
-            text_color = convert_color(arg3)
+        elif op == 1:  # OP_SET_PEN_COLOR (arg3: color)
+            pen_color = convert_color(arg3)
 
-        elif op == 2:  # OP_DRAW_TEXT
+        elif op == 2:  # OP_SET_PEN_STYLE (arg3: style)
+            pen_style = convert_pen_style(arg3)
+
+        elif op == 3:  # OP_SET_PEN_WIDTH (arg1: width)
+            pen_width = max(0.5, float(arg1))
+
+        elif op == 4:  # OP_MOVETO
+            last_x, last_y = x, y
+
+        elif op == 5:  # OP_LINETO
+            painter.save()
+            painter.setPen(QtGui.QPen(pen_color, pen_width, pen_style))
+            painter.drawLine(int(last_x), int(last_y), int(x), int(y))
+            painter.restore()
+            last_x, last_y = x, y
+
+        elif op == 6:  # OP_DRAW_TEXT
             painter.save()
 
             painter.translate(x, y)
             painter.rotate(-180 * arg1 / math.pi)
-            painter.setPen(text_color)
+            painter.setPen(pen_color)
 
             metrics = painter.fontMetrics()
             if hasattr(metrics, "horizontalAdvance"):
@@ -329,40 +343,21 @@ def execute_render_cmds(painter, commands):
             painter.drawText(int(dx), int(dy), arg3)
             painter.restore()
 
-        elif op == 3:  # OP_SET_LINE_COLOR (arg3: color)
-            line_color = convert_color(arg3)
-
-        elif op == 4:  # OP_SET_LINE_STYLE (arg3: style)
-            line_style = convert_line_style(arg3)
-
-        elif op == 5:  # OP_SET_LINE_WIDTH (arg1: width)
-            line_width = max(0.5, float(arg1))
-
-        elif op == 6:  # OP_MOVETO
-            last_x, last_y = x, y
-
-        elif op == 7:  # OP_LINETO
-            painter.save()
-            painter.setPen(QtGui.QPen(line_color, line_width, line_style))
-            painter.drawLine(int(last_x), int(last_y), int(x), int(y))
-            painter.restore()
-            last_x, last_y = x, y
-
-        elif op == 8:  # OP_DRAW_ELLIPSE (arg3: fill color)
+        elif op == 7:  # OP_DRAW_ELLIPSE (arg3: fill color)
             rx, ry = float(arg1), float(arg2)
             rect = QtCore.QRectF(x - rx, y - ry, rx * 2, ry * 2)
             painter.save()
-            painter.setPen(QtGui.QPen(line_color, line_width, line_style))
+            painter.setPen(QtGui.QPen(pen_color, pen_width, pen_style))
             fill_color = convert_color(arg3) if arg3 else None
             painter.setBrush(QtGui.QBrush(fill_color) if arg3 else Qt.NoBrush)
             painter.drawEllipse(rect)
             painter.restore()
 
-        elif op == 9:  # OP_DRAW_RECT (arg3: fill color)
+        elif op == 8:  # OP_DRAW_RECT (arg3: fill color)
             w, h = float(arg1), float(arg2)
             rect = QtCore.QRectF(x, y, w, h)
             painter.save()
-            painter.setPen(QtGui.QPen(line_color, line_width, line_style))
+            painter.setPen(QtGui.QPen(pen_color, pen_width, pen_style))
             fill_color = convert_color(arg3) if arg3 else None
             painter.setBrush(QtGui.QBrush(fill_color) if arg3 else Qt.NoBrush)
             painter.drawRect(rect)
