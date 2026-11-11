@@ -1018,7 +1018,7 @@ int Plot<T>::render(struct plt_render_cmd *out, size_t nout) const
 		cmds.push_back(plt_render_cmd_(OP_DRAW_RECT, 5, pxMin, pyMin, pxMax-pxMin, pyMax-pyMin, backgroundColor));
 
         // Axis X ticks
-		int nCharsYTicks = 0, nCharsY2Ticks = 0;
+		size_t nCharsYTicks = 0, nCharsY2Ticks = 0;
 		cmds.push_back(plt_render_cmd_(OP_SET_PEN_WIDTH, 10, 0.0f, 0.0f, 1.0f, 0.0f, ""));
 		cmds.push_back(plt_render_cmd_(OP_SET_PEN_STYLE, 10, 0.0f, 0.0f, 0.0f, 0.0f, axisX.grid.style));
 		for (T x : axisX.calculateTicks()) {
@@ -1367,11 +1367,11 @@ int Curve<T>::set_option(const std::string& option, const std::string& value)
 	return 0;
 }
 
-template class Axis<float>;
+template struct Axis<float>;
 template class Plot<float>;
-template class Curve<float>;
+template struct Curve<float>;
 
-template class Axis<double>;
+template struct Axis<double>;
 template class Plot<double>;
-template class Curve<double>;
+template struct Curve<double>;
 

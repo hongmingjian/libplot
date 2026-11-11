@@ -11,7 +11,7 @@
 template <typename T>
 class Plot;
 template <typename T>
-class Curve;
+struct Curve;
 
 struct Tick {
     float interval = 0.0f; // 0 for auto ticks
@@ -63,8 +63,8 @@ template <typename T>
 class Plot {
 	static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>, "Error: Must be float or double!");
 private:
-	friend class Axis<T>;
-	friend class Curve<T>;
+	friend struct Axis<T>;
+	friend struct Curve<T>;
 
 	int coord = COORD_CARTESIAN;
 
