@@ -436,7 +436,9 @@
   (let* ((interface (capi:element-interface pane))
          (plot (window-plt-handle interface)))
     (unless (or (null plot) (fli:null-pointer-p plot))
-      (let ((max-rcmds 1024))
+      (let ((max-rcmds (plt-render plot
+                                   (fli:make-pointer :type '(:struct libplot:plt-render-cmd) :address 0)
+                                   0)))
         (fli:with-dynamic-foreign-objects ((ptr-rcmds (:struct plt-render-cmd) :nelems max-rcmds))
           (let ((num-rcmds (plt-render plot ptr-rcmds max-rcmds)))
             (execute-render-cmds pane ptr-rcmds num-rcmds)))))))

@@ -401,12 +401,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         DeleteObject(hBgBrush);
 
         if (g_plt) {
-			const int MAX_OUT_COMMANDS = 1024;
-			std::vector<struct plt_render_cmd> out_cmds(MAX_OUT_COMMANDS);
-
-			int actual_count = g_plt->render(out_cmds.data(), MAX_OUT_COMMANDS);
-
-			if (actual_count > 0) {
+			int ncmds = g_plt->render(nullptr, 0);
+			if (ncmds > 0) {
+                std::vector<struct plt_render_cmd> out_cmds(ncmds);
+                g_plt->render(out_cmds.data(), ncmds);
 				ExecuteDrawCommands(hdcMem, out_cmds);
 			}
         } else {

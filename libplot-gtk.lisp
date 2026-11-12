@@ -358,7 +358,7 @@
                                     (ptr (gobject:pointer cr))
                                     )
                                 (unless (or (null plot) (cffi:null-pointer-p plot))
-                                  (let ((max-rcmds 1024))
+                                  (let ((max-rcmds (plt-render plot (cffi:null-pointer) 0)))
                                     (cffi:with-foreign-object (ptr-rcmds '(:struct plt-render-cmd) max-rcmds)
                                       (let ((num-rcmds (plt-render plot ptr-rcmds max-rcmds)))
                                         (execute-render-cmds ptr ptr-rcmds num-rcmds))))))

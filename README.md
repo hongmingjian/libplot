@@ -13,6 +13,5 @@ Currently, it has 8 instructions as defined in the [libplot.h](https://github.co
 - For details, please look at [libplot.h](https://github.com/hongmingjian/libplot/blob/master/libplot.h).
 
 ## Notes
-- When calling **Plot::render**(or its exported **plt_render**), the number of outputed **plt_render_cmd** is not known.
-  It depends on number of curves and points within them and whether they have markers or not, as well as the number of grids and ticks of the coordinate.
+- When calling **Plot::render**(or its exported **plt_render**), the number of output **plt_render_cmd** can be known by calling it with **out=nullptr** or **nout = 0**.
 - The **arg3** in the **plt_render_cmd** is a string of hard-coded 64 chars.
