@@ -183,11 +183,13 @@ class LibPlot:
     def remove(self, crv_handle):
         self._lib.plt_remove(crv_handle)
 
-    def render(self, plt_handle, max_commands=2048):
-        buf_type = LibPlot.PltRenderCmd * max_commands
+    def render(self, plt_handle):
+        count = self._lib.plt_render(plt_handle, None, 0)
+
+        buf_type = LibPlot.PltRenderCmd * count
         buf = buf_type()
 
-        count = self._lib.plt_render(plt_handle, buf, max_commands)
+        count = self._lib.plt_render(plt_handle, buf, count)
 
         commands = []
         for i in range(count):
@@ -268,8 +270,6 @@ def execute_render_cmds(painter, commands):
 
         return Qt.NoPen
 
-    sorted_commands = sorted(commands, key=lambda cmd: cmd.get("zIndex", 0))
-
     painter.save()
     painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
 
@@ -279,7 +279,7 @@ def execute_render_cmds(painter, commands):
 
     last_x, last_y = 0.0, 0.0
 
-    for cmd in sorted_commands:
+    for cmd in commands:
         op = cmd.get("op", 0)
         x = cmd.get("x", 0.0)
         y = cmd.get("y", 0.0)
@@ -437,7 +437,7 @@ class MyWidget(QtWidgets.QWidget):
 
                 elif event.type() == QtCore.QEvent.Paint:
                     painter = QtGui.QPainter(obj)
-                    cmds = self.libplot.render(self.plot, max_commands=2048)
+                    cmds = self.libplot.render(self.plot)
                     execute_render_cmds(painter, cmds)
                     return True
 
