@@ -200,7 +200,7 @@
          (arg2   (fli:foreign-slot-value rcmd 'arg2))
          (arg3   (fli:foreign-slot-value rcmd 'arg3)))
 
-;    (format t "~A ~A ~A ~A ~A ~A~%" op x y arg1 arg2 arg3)
+;    (format t "~A ~A ~A ~A ~A ~A \"~A\"~%" (cmd-z-index cmd) op x y arg1 arg2 arg3)
     (case op
       (#.+op-set-pen-color+
        (let ((color (parse-color arg3)))
@@ -289,26 +289,16 @@
       )))
 
 (defun execute-render-cmds (pane ptr-rcmds count)
-  (declare (type fixnum count))
   (when (> count 0)
-    (let ((indices (loop for i of-type fixnum from 0 below count collect i)))
-
-      (setf indices
-            (stable-sort indices #'<
-                         :key (lambda (i)
-                                (let* ((ptr-rcmd (fli:incf-pointer (fli:copy-pointer ptr-rcmds) i))
-                                       (cmd (fli:foreign-slot-value ptr-rcmd 'cmd)))
-                                  (cmd-z-index cmd)))))
-
-      (let ((draw-state (list :x 0.0 :y 0.0
-                              :pen-color :black
-                              :pen-style nil
-                              :pen-width 1.0
-                              ))
-            (ptr-rcmd (fli:copy-pointer ptr-rcmds)))
-        (dolist (i indices)
-          (execute-render-cmd pane ptr-rcmd draw-state)
-          (fli:incf-pointer ptr-rcmd))))))
+    (let ((draw-state (list :x 0.0 :y 0.0
+                            :pen-color :black
+                            :pen-style nil
+                            :pen-width 1.0
+                            ))
+          (ptr-rcmd (fli:copy-pointer ptr-rcmds)))
+      (dotimes (i count)
+        (execute-render-cmd pane ptr-rcmd draw-state)
+        (fli:incf-pointer ptr-rcmd)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (capi:define-interface main-interface ()

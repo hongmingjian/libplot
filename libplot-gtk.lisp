@@ -161,7 +161,7 @@
          (_arg3   (cffi:foreign-slot-pointer rcmd '(:struct plt-render-cmd) 'arg3))
          (arg3   (cffi:foreign-string-to-lisp _arg3 :max-chars 64))
          )
-;    (format t "~A ~A ~A ~A ~A \"~A\"~%" op x y arg1 arg2 arg3)
+;    (format t "~A ~A ~A ~A ~A ~A \"~A\"~%" (cmd-z-index cmd) op x y arg1 arg2 arg3)
     (case op
       (#.+op-set-pen-color+
        (apply #'cairo:cairo-set-source-rgba cr (parse-color arg3)))
@@ -257,25 +257,15 @@
       (t (error "unknown op=~A~%" op)))))
 
 (defun execute-render-cmds (cr ptr-rcmds count)
-  (declare (type fixnum count))
   (when (> count 0)
-    (let* ((struct-size (cffi:foreign-type-size '(:struct plt-render-cmd)))
-           (indices (loop for i of-type fixnum from 0 below count collect i)))
-      (setf indices
-            (stable-sort indices #'<
-                         :key (lambda (i)
-                                (let* ((ptr-rcmd (cffi:inc-pointer ptr-rcmds (* i struct-size)))
-                                       (cmd (cffi:foreign-slot-value ptr-rcmd '(:struct plt-render-cmd) 'cmd)))
-                                  (cmd-z-index cmd)))))
+    (let* ((struct-size (cffi:foreign-type-size '(:struct plt-render-cmd))))
       (let ((draw-state (list :x 0.0 :y 0.0
                               :pen-style nil
-                              ))
-            )
+                              )))
         (cairo:cairo-save cr)
 
-        (dolist (i indices)
-          (let ((ptr-rcmd (cffi:inc-pointer ptr-rcmds (* i struct-size))))
-            (execute-render-cmd cr ptr-rcmd draw-state)))
+        (dotimes (i count)
+          (execute-render-cmd cr (cffi:inc-pointer ptr-rcmds (* i struct-size)) draw-state))
 
         (cairo:cairo-restore cr)
         ))))

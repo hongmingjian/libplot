@@ -67,10 +67,6 @@ HPEN CreateGDIRenderPen(int style, int width, COLORREF color) {
 }
 
 void ExecuteDrawCommands(HDC hdc, std::vector<struct plt_render_cmd>& cmds) {
-    std::stable_sort(cmds.begin(), cmds.end(), [](const struct plt_render_cmd& a, const struct plt_render_cmd& b) {
-        return a.zIndex < b.zIndex;
-    });
-
     COLORREF oldTextColor = GetTextColor(hdc);
 	COLORREF curPenColor;
     int curPenStyle;
