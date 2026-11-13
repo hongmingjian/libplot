@@ -215,39 +215,10 @@ from PyQt5.QtCore import Qt
 
 def execute_render_cmds(painter, commands):
     def convert_color(color_str):
-        if not color_str:
-            return QtGui.QColor(0, 0, 0)
-
-        s = str(color_str).strip().lower()
-
-        named_colors = {
-            "red": QtGui.QColor(255, 0, 0),
-            "green": QtGui.QColor(0, 128, 0),
-            "blue": QtGui.QColor(0, 0, 255),
-            "black": QtGui.QColor(0, 0, 0),
-            "white": QtGui.QColor(255, 255, 255),
-            "gray": QtGui.QColor(128, 128, 128),
-            "yellow": QtGui.QColor(255, 255, 0)
-        }
-
-        if s in named_colors:
-            return named_colors[s]
-
-        if s.startswith("#"):
-            s = s[1:]
-
-        if len(s) == 6:
-            try:
-                color_val = int(s, 16)
-                r = (color_val >> 16) & 0xFF
-                g = (color_val >> 8) & 0xFF
-                b = color_val & 0xFF
-                return QtGui.QColor(r, g, b)
-            except ValueError:
-                pass
-
-        return QtGui.QColor(0, 0, 0)
-
+        color = QtGui.QColor(color_str)
+        if color.isValid():
+            return color
+        return QtGui.QColor("transparent")
 
     def convert_pen_style(style_str):
         if style_str is None:
