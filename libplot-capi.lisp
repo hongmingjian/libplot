@@ -197,7 +197,7 @@
              (gp:set-graphics-state pane :foreground :transparent))))
 
       (#.+op-set-pen-width+
-       (gp:set-graphics-state pane :thickness (max 1 (round arg1))))
+       (gp:set-graphics-state pane :thickness arg1))
 
       (#.+op-moveto+
        (setf (getf draw-state :x) x

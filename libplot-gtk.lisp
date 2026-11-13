@@ -132,12 +132,12 @@
 
 (defun parse-color (color)
   (let ((rgba (gdk:gdk-rgba-parse color)))
-    (if rgba
-        (list (gdk:gdk-rgba-red rgba)
-              (gdk:gdk-rgba-green rgba)
-              (gdk:gdk-rgba-blue rgba)
-              (gdk:gdk-rgba-alpha rgba))
-        '(0.0 0.0 0.0 0.0))))
+    (when rgba
+      (list (gdk:gdk-rgba-red rgba)
+            (gdk:gdk-rgba-green rgba)
+            (gdk:gdk-rgba-blue rgba)
+            (gdk:gdk-rgba-alpha rgba))
+      )))
 
 (defun parse-style (style)
   (when (stringp style)
@@ -164,7 +164,9 @@
 ;    (format t "~A ~A ~A ~A ~A ~A \"~A\"~%" (cmd-z-index cmd) op x y arg1 arg2 arg3)
     (case op
       (#.+op-set-pen-color+
-       (apply #'cairo:cairo-set-source-rgba cr (parse-color arg3)))
+       (let ((color (parse-color arg3)))
+         (when color
+           (apply #'cairo:cairo-set-source-rgba cr color))))
 
       (#.+op-set-pen-style+
        (let ((style (parse-style arg3)))
@@ -224,35 +226,46 @@
              (rx arg1)
              (ry arg2))
 
-         (cairo:cairo-save cr)
-         (cairo:cairo-translate cr x y)
-         (cairo:cairo-new-sub-path cr)
-         (cairo:cairo-scale cr rx ry)
-         (cairo:cairo-arc cr 0.0 0.0 1.0 0.0 (* 2.0 pi))
-         (apply #'cairo:cairo-set-source-rgba cr fill-color)
-         (cairo:cairo-fill-preserve cr)
-         (cairo:cairo-restore cr)
+         (when (or fill-color style)
+           (cairo:cairo-save cr)
+           (cairo:cairo-translate cr x y)
+           (cairo:cairo-new-sub-path cr)
+           (cairo:cairo-scale cr rx ry)
+           (cairo:cairo-arc cr 0.0 0.0 1.0 0.0 (* 2.0 pi))
 
-         (when style
-           (cairo:cairo-set-dash cr (if (/= 1 (length style)) style nil) 0)
-           (cairo:cairo-stroke cr))
-         ))
+           (when fill-color
+             (apply #'cairo:cairo-set-source-rgba cr fill-color)
+             (if style
+                 (cairo:cairo-fill-preserve cr)
+                 (cairo:cairo-fill cr)))
+
+           (cairo:cairo-restore cr)
+
+           (when style
+             (cairo:cairo-set-dash cr (if (/= 1 (length style)) style nil) 0)
+             (cairo:cairo-stroke cr))
+           )))
 
       (#.+op-draw-rect+
        (let ((style (getf draw-state :pen-style))
              (fill-color (parse-color arg3))
              )
 
-         (cairo:cairo-save cr)
-         (cairo:cairo-rectangle cr x y arg1 arg2)
-         (apply #'cairo:cairo-set-source-rgba cr fill-color)
-         (cairo:cairo-fill-preserve cr)
-         (cairo:cairo-restore cr)
+         (when (or fill-color style)
+           (cairo:cairo-rectangle cr x y arg1 arg2)
 
-         (when style
-           (cairo:cairo-set-dash cr (if (/= 1 (length style)) style nil) 0)
-           (cairo:cairo-stroke cr))
-         ))
+           (when fill-color
+             (cairo:cairo-save cr)
+             (apply #'cairo:cairo-set-source-rgba cr fill-color)
+             (if style
+                 (cairo:cairo-fill-preserve cr)
+                 (cairo:cairo-fill cr))
+             (cairo:cairo-restore cr))
+
+           (when style
+             (cairo:cairo-set-dash cr (if (/= 1 (length style)) style nil) 0)
+             (cairo:cairo-stroke cr))
+           )))
 
       (t (error "unknown op=~A~%" op)))))
 
