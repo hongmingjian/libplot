@@ -142,46 +142,29 @@
   :module "libplot"
   )
 
-(defun parse-color (input)
-  (cond
-    ((keywordp input) input)
-
-    ((symbolp input) (intern (symbol-name input) :keyword))
-
-    ((stringp input)
-     (let* ((s (string-trim " \t\n" input))
-            (has-hash (and (> (length s) 0) (char= (char s 0) #\#)))
-            (hex-str (if has-hash (subseq s 1) s)))
-
-       (if (and (every (lambda (c) (digit-char-p c 16)) hex-str)
-                (or (= (length hex-str) 3) (= (length hex-str) 6)))
-
-           (if (= (length hex-str) 6)
-               (let ((r (/ (parse-integer hex-str :start 0 :end 2 :radix 16) 255.0))
-                     (g (/ (parse-integer hex-str :start 2 :end 4 :radix 16) 255.0))
-                     (b (/ (parse-integer hex-str :start 4 :end 6 :radix 16) 255.0)))
-                 (color:make-rgb (coerce r 'short-float)
-                                 (coerce g 'short-float)
-                                 (coerce b 'short-float)))
-               (let ((r (/ (parse-integer (string (char hex-str 0)) :radix 16) 15.0))
-                     (g (/ (parse-integer (string (char hex-str 1)) :radix 16) 15.0))
-                     (b (/ (parse-integer (string (char hex-str 2)) :radix 16) 15.0)))
-                 (color:make-rgb (coerce r 'short-float)
-                                 (coerce g 'short-float)
-                                 (coerce b 'short-float))))
-
-           (let ((sym (intern (string-upcase s) :keyword)))
-             (if (color:get-color-spec sym)
-                 sym
-                 nil
-                 )))))
-    (t
-      nil
-      )))
+(defun parse-color (input_)
+  (when (stringp input_)
+    (let ((input (string-trim " \t" input_)))
+      (unless (string= input "")
+        (let ((has-hash (char= (char input 0) #\#)))
+          (or (and (not has-hash)
+                   (color:get-color-spec (intern (string-upcase input) :keyword)))
+              (let* ((hex-str (if has-hash (subseq input 1) input)))
+                (when (and (every (lambda (c) (digit-char-p c 16)) hex-str)
+                           (or (= (length hex-str) 3) (= (length hex-str) 6)))
+                  (if (= (length hex-str) 6)
+                      (let ((r (/ (parse-integer hex-str :start 0 :end 2 :radix 16) 255.0s0))
+                            (g (/ (parse-integer hex-str :start 2 :end 4 :radix 16) 255.0s0))
+                            (b (/ (parse-integer hex-str :start 4 :end 6 :radix 16) 255.0s0)))
+                        (color:make-rgb r g b))
+                      (let ((r (/ (parse-integer (string (char hex-str 0)) :radix 16) 15.0s0))
+                            (g (/ (parse-integer (string (char hex-str 1)) :radix 16) 15.0s0))
+                            (b (/ (parse-integer (string (char hex-str 2)) :radix 16) 15.0s0)))
+                        (color:make-rgb r g b)))))))))))
 
 (defun parse-style (style)
   (when (stringp style)
-    (let ((s (string-trim " \t\r\n" style)))
+    (let ((s (string-trim " \t" style)))
       (cond
         ((string= s "-") '(1)) ; solid
         ((string= s "--") '(6 4)) ; dash
@@ -205,14 +188,16 @@
       (#.+op-set-pen-color+
        (let ((color (parse-color arg3)))
          (when color
-           (setf (getf draw-state :pen-color) color))))
+           (gp:set-graphics-state pane :foreground color))))
 
       (#.+op-set-pen-style+
        (let ((style (parse-style arg3)))
-         (setf (getf draw-state :pen-style) style)))
+         (if style
+             (gp:set-graphics-state pane :dashed (/= 1 (length style)) :dash style)
+             (gp:set-graphics-state pane :foreground :transparent))))
 
       (#.+op-set-pen-width+
-       (setf (getf draw-state :pen-width) arg1))
+       (gp:set-graphics-state pane :thickness (max 1 (round arg1))))
 
       (#.+op-moveto+
        (setf (getf draw-state :x) x
@@ -220,25 +205,15 @@
 
       (#.+op-lineto+
        (let ((cur-x (getf draw-state :x))
-             (cur-y (getf draw-state :y))
-             (line-color (getf draw-state :pen-color))
-             (style (getf draw-state :pen-style))
-             (width (getf draw-state :pen-width)))
-         (when style
-           (gp:with-graphics-state (pane :foreground line-color
-                                         :thickness (max 1 (round width))
-                                         :dashed (/= 1 (length style))
-                                         :dash style
-                                         )
-             (gp:draw-line pane
-               (round cur-x) (round cur-y)
-               (round x) (round y))))
+             (cur-y (getf draw-state :y)))
+         (gp:draw-line pane
+                       (round cur-x) (round cur-y)
+                       (round x) (round y))
          (setf (getf draw-state :x) x
                (getf draw-state :y) y)))
 
       (#.+op-draw-text+
-       (let* ((text-color (getf draw-state :pen-color))
-              (align-flags (truncate arg2))
+       (let* ((align-flags (truncate arg2))
               (h-align (cond ((logtest align-flags +align-hcenter+) :center)
                              ((logtest align-flags +align-right+) :right)
                              (t :left)))
@@ -247,43 +222,36 @@
                              ((logtest align-flags +align-baseline+) :baseline)
                              (t :top))))
 
-         (gp:with-graphics-state (pane :foreground text-color)
-           (gp:with-graphics-transform (pane (gp:apply-rotation-around-point
-                                               (gp:make-transform) (- arg1) x y))
-             (multiple-value-bind (left top right bottom)
-               (gp:get-string-extent pane arg3)
-               (let* ((width  (- right left))
-                      (height (- bottom top))
-                      (dx (case h-align
-                            (:center (- (/ width 2) left))
-                            (:right  (- width left))
-                            (t       (- left)) ; :left
-                            ))
-                      (dy (case v-align
-                            (:center   (+ (/ height 2) bottom))
-                            (:bottom   (- bottom))
-                            (:baseline 0)
-                            (t         (- top)) ; :top
-                            )))
-                 (gp:draw-string pane arg3 (- x dx) (+ y dy))))))))
+         (gp:with-graphics-transform (pane (gp:apply-rotation-around-point
+                                             (gp:make-transform) (- arg1) x y))
+           (multiple-value-bind (left top right bottom)
+             (gp:get-string-extent pane arg3)
+             (let* ((width  (- right left))
+                    (height (- bottom top))
+                    (dx (case h-align
+                          (:center (- (/ width 2) left))
+                          (:right  (- width left))
+                          (t       (- left)) ; :left
+                          ))
+                    (dy (case v-align
+                          (:center   (+ (/ height 2) bottom))
+                          (:bottom   (- bottom))
+                          (:baseline 0)
+                          (t         (- top)) ; :top
+                          )))
+               (gp:draw-string pane arg3 (- x dx) (+ y dy)))))))
 
       (#.+op-draw-ellipse+
-       (let ((line-color (getf draw-state :pen-color))
-             (fill-color (parse-color arg3)))
+       (let ((fill-color (parse-color arg3)))
          (when fill-color
-           (gp:with-graphics-state (pane :foreground fill-color)
-                                   (gp:draw-ellipse pane x y arg1 arg2 :filled t)))
-         (gp:with-graphics-state (pane :foreground line-color)
-                                 (gp:draw-ellipse pane x y arg1 arg2 :filled nil))))
+           (gp:draw-ellipse pane x y arg1 arg2 :foreground fill-color :filled t))
+         (gp:draw-ellipse pane x y arg1 arg2 :filled nil)))
 
       (#.+op-draw-rect+
-       (let ((line-color (getf draw-state :pen-color))
-             (fill-color (parse-color arg3)))
+       (let ((fill-color (parse-color arg3)))
          (when fill-color
-           (gp:with-graphics-state (pane :foreground fill-color)
-             (gp:draw-rectangle pane x y arg1 arg2 :filled t)))
-         (gp:with-graphics-state (pane :foreground line-color)
-           (gp:draw-rectangle pane x y arg1 arg2 :filled nil))))
+           (gp:draw-rectangle pane x y arg1 arg2 :foreground fill-color :filled t))
+         (gp:draw-rectangle pane x y arg1 arg2 :filled nil)))
 
       (t (error "unknown op=~A~%" op))
       )))
@@ -291,14 +259,12 @@
 (defun execute-render-cmds (pane ptr-rcmds count)
   (when (> count 0)
     (let ((draw-state (list :x 0.0 :y 0.0
-                            :pen-color :black
-                            :pen-style nil
-                            :pen-width 1.0
                             ))
           (ptr-rcmd (fli:copy-pointer ptr-rcmds)))
-      (dotimes (i count)
-        (execute-render-cmd pane ptr-rcmd draw-state)
-        (fli:incf-pointer ptr-rcmd)))))
+      (gp:with-graphics-state (pane)
+        (dotimes (i count)
+          (execute-render-cmd pane ptr-rcmd draw-state)
+          (fli:incf-pointer ptr-rcmd))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (capi:define-interface main-interface ()
