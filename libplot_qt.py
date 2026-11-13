@@ -340,10 +340,12 @@ def execute_render_cmds(painter, commands):
 import os, sys
 from PyQt5 import QtWidgets
 
-def generate_rose_curve(k=4, a=1.0, num_points=360, polar=False):
+def rose_curve(npetals=4, points_per_petal=72, polar=False):
+    b = 1.0
+    npoints = npetals * points_per_petal
     max_theta = 2 * math.pi
-    theta = [i * max_theta / (num_points - 1) for i in range(num_points)]
-    r = [a * math.cos(k * t) for t in theta]
+    theta = [i * max_theta / (npoints - 1) for i in range(npoints)]
+    r = [b * math.cos(npetals * t) for t in theta]
 
     if polar:
         return theta, r
@@ -381,8 +383,7 @@ class MyWidget(QtWidgets.QWidget):
             self.plot = self.libplot.create(coord)
             self.libplot.set_option(self.plot, "plot.background.color", "#F0F0F0")
 
-            x_vals, y_vals = generate_rose_curve(k=4.0, num_points=180,
-                                                 polar=(coord != LibPlot.CoordSystem.COORD_CARTESIAN))
+            x_vals, y_vals = rose_curve(npetals=4, polar=(coord != LibPlot.CoordSystem.COORD_CARTESIAN))
             self.curve_ptr = self.libplot.curve(self.plot, x_vals, y_vals)
             self.libplot.set_option(self.curve_ptr, "curve.color", "#0000FF")
             self.libplot.set_option(self.curve_ptr, "curve.marker.shape", "s")

@@ -141,7 +141,7 @@
 
 (defun parse-style (style)
   (when (stringp style)
-    (let* ((s (string-trim " \t\r\n" style)))
+    (let* ((s (string-trim " \t" style)))
       (cond
         ((string= s "-") '(1)) ; solid
         ((string= s "--") '(6 4)) ; dash
@@ -274,32 +274,41 @@
 (defun archimedean-spiral (nturns &key (points-per-turn 72) (polar nil))
   (declare (optimize (speed 3) (safety 0) (debug 0))
            (type fixnum nturns points-per-turn))
-  (let* ((npoints (1+ (* nturns points-per-turn)))
+  (let* ((a 0.0d0)
+         (b 1.0d0)
+         (npoints (1+ (* nturns points-per-turn)))
+         (astep (/ (* 2.0d0 pi) points-per-turn))
          (x-vec (make-array npoints :element-type 'single-float))
          (y-vec (make-array npoints :element-type 'single-float))
-         (a 0.0d0)
-         (b 1.0d0))
-    (loop for i of-type fixnum from 0 below npoints
-          for theta = (* i (/ (* 2.0d0 pi) points-per-turn))
-          for r = (+ a (* b theta))
-          do (setf (aref x-vec i) (float (if polar (rem theta (* 2.0d0 pi)) (* r (cos theta))) 1.0f0)
-                   (aref y-vec i) (float (if polar r (* r (sin theta))) 1.0f0)))
-    (values x-vec y-vec npoints)))
-
-(defun rose-curve (k &key (points-per-turn 72) (polar nil))
-  (declare (optimize (speed 3) (safety 0) (debug 0))
-           (type fixnum k points-per-turn))
-  (let* ((b 1.0d0)
-         (max-angle (* 2.0d0 pi))
-         (npoints (1+ (the fixnum (round (* k points-per-turn)))))
-         (x-vec (make-array npoints :element-type 'single-float))
-         (y-vec (make-array npoints :element-type 'single-float))
-         (astep (/ max-angle (1- npoints))))
+         )
     (loop for i of-type fixnum from 0 below npoints
           for theta = (* i astep)
-          for r = (* b (cos (* k theta)))
+          for r = (+ a (* b theta))
+          do (setf (aref x-vec i) (float (if polar
+                                             (rem theta (* 2.0d0 pi))
+                                             (* r (cos theta)))
+                                          1.0f0)
+                   (aref y-vec i) (float (if polar
+                                             r
+                                             (* r (sin theta)))
+                                          1.0f0)))
+    (values x-vec y-vec npoints)))
+
+(defun rose-curve (npetals &key (points-per-petal 72) (polar nil))
+  (declare (optimize (speed 3) (safety 0) (debug 0))
+           (type fixnum npetals points-per-petal))
+  (let* ((b 1.0d0)
+         (npoints (round (* npetals points-per-petal)))
+         (astep (/ (* 2.0d0 pi) (1- npoints)))
+         (x-vec (make-array npoints :element-type 'single-float))
+         (y-vec (make-array npoints :element-type 'single-float))
+         )
+    (loop for i of-type fixnum from 0 below npoints
+          for theta = (* i astep)
+          for r = (* b (cos (* npetals theta)))
           do (setf (aref x-vec i) (float (if polar theta (* r (cos theta))) 1.0f0)
-                   (aref y-vec i) (float (if polar r (* r (sin theta))) 1.0f0)))
+                   (aref y-vec i) (float (if polar r (* r (sin theta))) 1.0f0)
+                   ))
     (values x-vec y-vec npoints)))
 
 (defstruct app-state
@@ -434,8 +443,10 @@
                                   (lambda ()
                                     (let ((crvs (app-state-curves state)))
                                       (multiple-value-bind (x-vec y-vec count)
-                                        (rose-curve (+ 3 (random 3))
-                                                    :polar (/= coord +coord-cartesian+))
+                                        ;(archimedean-spiral
+                                        (rose-curve
+                                          (+ 3 (random 3))
+                                          :polar (/= coord +coord-cartesian+))
                                         (if (> (length crvs) 0)
                                             (plt-curve (first crvs) x-vec y-vec count)
                                             (let ((crv (plt-curve plot x-vec y-vec count)))

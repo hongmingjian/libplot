@@ -304,14 +304,15 @@
 (defun archimedean-spiral (nturns &key (points-per-turn 72) (polar nil))
   (declare (optimize (speed 3) (safety 0) (debug 0))
            (type fixnum nturns points-per-turn))
-  (let* ((npoints (1+ (* nturns points-per-turn)))
+  (let* ((a 0.0d0)
+         (b 1.0d0)
+         (npoints (1+ (* nturns points-per-turn)))
+         (astep (/ (* 2.0d0 pi) points-per-turn))
          (x-vec (make-array npoints :element-type 'single-float :allocation :static))
          (y-vec (make-array npoints :element-type 'single-float :allocation :static))
-         (a 0.0d0)
-         (b 1.0d0)
          )
     (loop for i of-type fixnum from 0 below npoints
-          for theta = (* i (/ (* 2.0d0 pi) points-per-turn))
+          for theta = (* i astep)
           for r = (+ a (* b theta))
           do (setf (aref x-vec i) (float (if polar
                                              (rem theta (* 2.0d0 pi))
@@ -323,25 +324,20 @@
                                           1.0f0)))
     (values x-vec y-vec npoints)))
 
-(defun rose-curve (k &key (points-per-turn 72) (polar nil))
+(defun rose-curve (npetals &key (points-per-petal 72) (polar nil))
   (declare (optimize (speed 3) (safety 0) (debug 0))
-           (type fixnum k points-per-turn))
+           (type fixnum npetals points-per-petal))
   (let* ((b 1.0d0)
-         (max-angle (* 2.0d0 pi))
-         (npoints (1+ (the fixnum (round (* k points-per-turn)))))
+         (npoints (round (* npetals points-per-petal)))
+         (astep (/ (* 2.0d0 pi) (1- npoints)))
          (x-vec (make-array npoints :element-type 'single-float :allocation :static))
          (y-vec (make-array npoints :element-type 'single-float :allocation :static))
-         (astep (/ max-angle (1- npoints)))
          )
     (loop for i of-type fixnum from 0 below npoints
           for theta = (* i astep)
-          for r = (* b (cos (* k theta)))
-          do (setf (aref x-vec i) (float (if polar
-                                             theta
-                                             (* r (cos theta))) 1.0f0)
-                   (aref y-vec i) (float (if polar
-                                             r
-                                             (* r (sin theta))) 1.0f0)
+          for r = (* b (cos (* npetals theta)))
+          do (setf (aref x-vec i) (float (if polar theta (* r (cos theta))) 1.0f0)
+                   (aref y-vec i) (float (if polar r (* r (sin theta))) 1.0f0)
                    ))
     (values x-vec y-vec npoints)))
 
