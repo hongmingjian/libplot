@@ -22,4 +22,4 @@ $(program).$(EXT): $(program).o plot.o
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 clean:
-	$(RM) *.o *.$(EXT)
+	-$(RM) *.o *.$(EXT)

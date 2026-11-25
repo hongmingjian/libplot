@@ -30,4 +30,4 @@ demo.exe: $$(@B).cpp $(program).cpp
 	cl /nologo /std:c++17 /W3 /EHsc /Zi /Od /MDd /RTC1 /I. /D_DEBUG $** /link /INCREMENTAL:NO /DEBUG user32.lib gdi32.lib
 
 clean:
-	del $(target).dll $(target).lib demo.exe *.exp *.obj *.ilk *.pdb
+	-del $(target).dll $(target).lib demo.exe *.exp *.obj *.ilk *.pdb
