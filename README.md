@@ -9,7 +9,7 @@ Currently, it has 8 instructions as defined in the [libplot.h](https://github.co
 
 ## How to use?
 - The [plot.hpp](https://github.com/hongmingjian/libplot/blob/master/plot.hpp) and [plot.cpp](https://github.com/hongmingjian/libplot/blob/master/plot.cpp) can be used directly if you are using C++17 or later, as demonstrated in [demo.cpp](https://github.com/hongmingjian/libplot/blob/master/demo.cpp) for Windows.
-- Run *nmake* for libplot.dll or *make* for libplot.so or libplot.dylib. The examples can be found in [libplot_qt.py](https://github.com/hongmingjian/libplot/blob/master/libplot_qt.py) for Python3 with Qt5, in [libplot-capi.lisp](https://github.com/hongmingjian/libplot/blob/master/libplot-capi.lisp) for LispWorks or [libplot-gtk.lisp](https://github.com/hongmingjian/libplot/blob/master/libplot-gtk.lisp) for SBCL+GTK3.
+- Run *nmake* for libplot.dll or *make* for libplot.so or libplot.dylib. The examples can be found in [libplot\_qt.py](https://github.com/hongmingjian/libplot/blob/master/libplot_qt.py) for Python3 with Qt5, and [libplot.lisp](https://github.com/hongmingjian/libplot/blob/master/libplot.lisp) for Common Lisp.
 - For details, please look at [libplot.h](https://github.com/hongmingjian/libplot/blob/master/libplot.h).
 
 ## Notes
